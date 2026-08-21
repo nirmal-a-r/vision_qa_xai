@@ -1,0 +1,75 @@
+# =============================================================================
+# VisionQA — Phase 1 (Vision Core) + Phase 2 (XAI Engine) — config.yaml
+# Single source of truth. Adapted for Kaggle notebook environment.
+# =============================================================================
+
+paths:
+  # Kaggle input mounts (read-only) — adjust the dataset slugs if you attach
+  # them under different names in "Add Data".
+  pcb_raw_dir: "/kaggle/input/pcb-defects"                        # akhatova/pcb-defects
+  neu_raw_dir: "/kaggle/input/neu-surface-defect-database"        # kaustubhdikshit/neu-surface-defect-database
+
+  # Kaggle working dir (writable)
+  work_dir: "/kaggle/working"
+  processed_dir: "/kaggle/working/data/processed"
+  coco_pcb_json: "/kaggle/working/data/processed/pcb_coco.json"
+  coco_neu_json: "/kaggle/working/data/processed/neu_coco.json"
+  coco_merged_json: "/kaggle/working/data/processed/merged_coco.json"
+  images_merged_dir: "/kaggle/working/data/processed/images"
+
+  checkpoints_dir: "/kaggle/working/checkpoints"
+  outputs_dir: "/kaggle/working/outputs"
+  heatmaps_dir: "/kaggle/working/outputs/heatmaps"
+  eval_dir: "/kaggle/working/outputs/eval"
+  logs_dir: "/kaggle/working/logs"
+
+data:
+  # Roboflow COCO export for PCB defects is assumed to already sit at
+  # <pcb_raw_dir>/<split>/_annotations.coco.json + images alongside it.
+  # If you instead point pcb_raw_dir at the raw akhatova/pcb-defects Kaggle
+  # dataset (PASCAL-VOC-style XML, like NEU), set pcb_format: "voc" and the
+  # same neu_xml_to_coco converter will be reused for it.
+  pcb_format: "coco"          # "coco" (Roboflow export) or "voc" (raw XML)
+  val_fraction: 0.15
+  test_fraction: 0.10
+  seed: 42
+  unify_label_space: true     # merge PCB + NEU classes into one num_classes space
+
+model:
+  backbone: "swin_base_patch4_window7_224"   # timm backbone name
+  use_timm_backbone: true
+  detector_checkpoint: "SenseTime/deformable-detr"  # HF base config to inherit from
+  num_queries: 100
+  image_size: 800
+
+training:
+  batch_size: 2
+  grad_accum_steps: 4
+  epochs: 30
+  lr: 1.0e-4
+  lr_backbone: 1.0e-5
+  weight_decay: 1.0e-4
+  focal_alpha: 0.25
+  focal_gamma: 2.0
+  giou_weight: 2.0
+  bbox_weight: 5.0
+  class_weight: 1.0
+  warmup_steps: 500
+  fp16: true
+  eval_every_epochs: 2
+  save_every_epochs: 5
+
+xai:
+  method: "rollout"          # "rollout" or "rollout+grad" (Chefer-style relevance)
+  discard_ratio: 0.9         # fraction of lowest attention values zeroed before rollout
+  overlay_alpha: 0.45
+
+segmentation:
+  # No polygon masks exist in the raw PCB / NEU datasets (bbox-only).
+  # We derive pixel masks from detected boxes via OpenCV GrabCut instead of
+  # training a full Mask2Former on unavailable ground truth. See README.
+  method: "grabcut_from_boxes"
+  grabcut_iters: 5
+
+decision_rule:
+  replace_damage_pct_threshold: 15.0

@@ -1,0 +1,8 @@
+# Kaggle notebooks ship with torch/torchvision/opencv/sklearn/matplotlib already.
+# This file only lists what typically needs an explicit install on Kaggle.
+transformers>=4.40
+timm>=0.9
+albumentations>=1.4
+pycocotools>=2.0.7
+captum>=0.7
+pyyaml>=6.0
