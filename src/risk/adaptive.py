@@ -227,3 +227,23 @@ def run_adaptive_experiment(loss_at_lambda, n_steps, alpha, gamma=0.02,
         ctrl.update(L)
     return {"lambdas": np.asarray(lams), "losses": np.asarray(losses),
             "controller": ctrl, "summary": ctrl.summary()}
+
+
+def simulated_line_loss(quality_schedule):
+    """Build an escape-loss function for a drifting inspection line.
+
+    `quality_schedule(t) -> q in (0, 1]` is the detector's effective quality at
+    time t, where 1.0 means "as trained". Scores for true defects are drawn from
+    a Beta whose mass slides toward zero as q falls, which is what a drifting
+    line looks like from the detector's side: defects get harder to see, scores
+    sag, and a frozen threshold starts letting them through.
+
+    Lives here rather than in the test file so the drift experiment, the paper
+    figure and the notebook all exercise the same generator.
+    """
+    def loss_at_lambda(t, lam, rng):
+        q = float(quality_schedule(t))
+        n_def = 1 + rng.poisson(1.5)
+        scores = rng.beta(6.0 * q, 3.0, size=n_def) * q
+        return float((scores < lam).mean())
+    return loss_at_lambda

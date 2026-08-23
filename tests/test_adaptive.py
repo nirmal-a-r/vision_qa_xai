@@ -18,25 +18,8 @@ from src.risk.adaptive import (
     AdaptiveRiskController,
     DriftMonitor,
     run_adaptive_experiment,
+    simulated_line_loss as make_loss_fn,
 )
-
-
-def make_loss_fn(shift_schedule):
-    """Escape loss as a function of threshold, with a drifting detector.
-
-    The detector's score for a true defect is Beta-distributed with a mean that
-    `shift_schedule(t)` pushes downward over time - the natural signature of a
-    line drifting away from the training distribution (defects become harder to
-    see, scores fall, escapes rise at a fixed threshold).
-    """
-    def loss_at_lambda(t, lam, rng):
-        quality = shift_schedule(t)                     # in (0, 1]; 1 = as trained
-        n_def = 1 + rng.poisson(1.5)
-        scores = rng.beta(2.0 * quality * 3, 3.0) * quality
-        scores = np.atleast_1d(scores) if np.ndim(scores) else np.array([scores])
-        scores = rng.beta(6.0 * quality, 3.0, size=n_def) * quality
-        return float((scores < lam).mean())
-    return loss_at_lambda
 
 
 def test_adaptive_converges_no_drift():
