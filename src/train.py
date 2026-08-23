@@ -75,6 +75,7 @@ def train(config_path: str):
         focal_alpha=cfg["training"]["focal_alpha"],
         bbox_cost=cfg["training"]["bbox_weight"],
         giou_cost=cfg["training"]["giou_weight"],
+        image_size=cfg["model"]["image_size"],
     )
     model.to(device)
 

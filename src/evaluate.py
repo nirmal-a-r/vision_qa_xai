@@ -26,7 +26,7 @@ def load_config(path):
 
 
 @torch.no_grad()
-def run_inference_for_eval(model, loader, device, score_thresh=0.05):
+def run_inference_for_eval(model, loader, device, score_thresh=0.05, label_to_catid=None):
     model.eval()
     results = []
     for batch in loader:
@@ -49,9 +49,13 @@ def run_inference_for_eval(model, loader, device, score_thresh=0.05):
                 cx, cy, bw, bh = boxes[b, q].tolist()
                 x = (cx - bw / 2) * w
                 y = (cy - bh / 2) * h
+                # The model emits contiguous labels (0..num_classes-1); COCO GT
+                # uses the original category ids (1..N). Map back, or COCOeval
+                # matches nothing and every AP comes out 0.
+                label = int(class_ids[b, q].item())
                 results.append({
                     "image_id": img_id,
-                    "category_id": int(class_ids[b, q].item()),
+                    "category_id": label_to_catid[label] if label_to_catid else label,
                     "bbox": [x, y, bw * w, bh * h],
                     "score": s,
                 })
@@ -77,11 +81,14 @@ def evaluate(config_path: str, checkpoint_path: str):
         use_timm_backbone=cfg["model"]["use_timm_backbone"],
         base_checkpoint=cfg["model"]["detector_checkpoint"],
         num_queries=cfg["model"]["num_queries"],
+        image_size=cfg["model"]["image_size"],
+        pretrained_backbone=False,   # overwritten by the checkpoint below
     )
     model.load_state_dict(ckpt["model_state_dict"])
     model.to(device)
 
-    predictions = run_inference_for_eval(model, test_loader, device)
+    label_to_catid = {label: cid for cid, label in test_ds.catid_to_label.items()}
+    predictions = run_inference_for_eval(model, test_loader, device, label_to_catid=label_to_catid)
 
     os.makedirs(cfg["paths"]["eval_dir"], exist_ok=True)
     pred_path = os.path.join(cfg["paths"]["eval_dir"], "test_predictions.json")

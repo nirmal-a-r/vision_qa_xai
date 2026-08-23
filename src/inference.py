@@ -52,11 +52,14 @@ class VisionQAPipeline:
             use_timm_backbone=self.cfg["model"]["use_timm_backbone"],
             base_checkpoint=self.cfg["model"]["detector_checkpoint"],
             num_queries=self.cfg["model"]["num_queries"],
+            image_size=self.cfg["model"]["image_size"],
+            pretrained_backbone=False,   # overwritten by the checkpoint below
         )
         self.model.load_state_dict(ckpt["model_state_dict"])
         self.model.to(self.device).eval()
 
         self.transform = get_val_transforms(self.cfg["model"]["image_size"])
+        self.score_thresh = float(self.cfg.get("inference", {}).get("score_thresh", 0.25))
 
         try:
             self.rollout = SwinAttentionRollout(self.model, discard_ratio=self.cfg["xai"]["discard_ratio"])
@@ -65,7 +68,8 @@ class VisionQAPipeline:
             self.rollout = None
 
     @torch.no_grad()
-    def _detect(self, pixel_values: torch.Tensor, orig_hw, score_thresh: float = 0.5):
+    def _detect(self, pixel_values: torch.Tensor, orig_hw, score_thresh: float = None):
+        score_thresh = self.score_thresh if score_thresh is None else score_thresh
         outputs = self.model(pixel_values=pixel_values.unsqueeze(0).to(self.device))
         probs = outputs.logits.sigmoid()[0]         # [num_queries, num_classes]
         scores, class_ids = probs.max(-1)
@@ -103,6 +107,10 @@ class VisionQAPipeline:
         component_mask = build_component_mask(
             boxes_xyxy, labels, scores, image_np,
             grabcut_iters=self.cfg["segmentation"]["grabcut_iters"],
+            # _detect already applied the threshold; without passing it here
+            # build_component_mask re-filters at its own 0.5 default and
+            # silently drops every box back out again.
+            score_thresh=self.score_thresh,
         )
         damage_pct = damage_percentage(component_mask)
 
