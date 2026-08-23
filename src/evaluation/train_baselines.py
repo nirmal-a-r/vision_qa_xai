@@ -56,13 +56,25 @@ def _load_model(model_name):
     return (RTDETR if "rtdetr" in model_name.lower() else YOLO)(model_name)
 
 
+# RT-DETR measured at 46.4 s/epoch vs YOLOv8s at 6.6 s/epoch on NEU@256 on a
+# clean GPU - a 7x gap, so the schedule has to be budgeted, not copied across.
+# At the YOLO settings RT-DETR would need ~20 h for the five datasets. These
+# overrides bring it to ~6.5 h by trimming epochs and easing resolution on the
+# three high-resolution sets, while leaving PCB highest (its defects are 2.6%
+# of frame and resolution is the binding constraint there, not epochs).
+RTDETR_OVERRIDES = {
+    "neu":           dict(imgsz=256, batch=8, epochs=100),
+    "magnetic_tile": dict(imgsz=384, batch=8, epochs=100),
+    "kolektor":      dict(imgsz=512, batch=4, epochs=60),
+    "gc10":          dict(imgsz=640, batch=4, epochs=60),
+    "pcb":           dict(imgsz=800, batch=2, epochs=80),
+}
+
+
 def train_one(name, data_yaml, model_name, out_dir, seed=0, device=0, override=None):
     cfg = dict(CONFIGS[name])
     if "rtdetr" in model_name.lower():
-        # RT-DETR carries a transformer encoder-decoder on top of the backbone
-        # and needs roughly twice the activation memory of YOLOv8s at equal
-        # resolution; halve the batch to stay inside 8 GB.
-        cfg["batch"] = max(2, cfg["batch"] // 2)
+        cfg.update(RTDETR_OVERRIDES.get(name, {}))
     if override:
         cfg.update(override)
 
@@ -86,6 +98,7 @@ def train_one(name, data_yaml, model_name, out_dir, seed=0, device=0, override=N
         workers=0,             # Windows: worker spawn re-imports, keep in-process
         val=True,
         plots=True,
+        deterministic=False,
         # Augmentation. CLAHE is applied upstream as an offline pass (see
         # src/data/photometric.py); these are the geometric/photometric ones
         # ultralytics applies online.
@@ -109,8 +122,11 @@ def train_one(name, data_yaml, model_name, out_dir, seed=0, device=0, override=N
         "test_mAP50_95": float(metrics.box.map),
         "test_precision": float(metrics.box.mp),
         "test_recall": float(metrics.box.mr),
-        "weights": os.path.join(out_dir, f"{name}_{model_name.replace('.pt','')}_s{seed}",
-                                "weights", "best.pt"),
+        # Ask the trainer where it saved rather than reconstructing the path:
+        # ultralytics prepends its own configured runs_dir to `project`, so
+        # project="runs/detect" actually lands in runs/detect/runs/detect/...
+        "weights": str(getattr(model.trainer, "best", "")) or os.path.join(
+            str(getattr(model.trainer, "save_dir", out_dir)), "weights", "best.pt"),
     }
     print(f"[{name}] DONE in {dt/60:.1f} min | "
           f"test mAP@0.5={res['test_mAP50']:.4f} mAP@[.5:.95]={res['test_mAP50_95']:.4f}",
