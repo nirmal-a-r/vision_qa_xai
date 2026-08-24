@@ -1,102 +1,133 @@
-# VisionQA — Phase 1 (Vision Core) + Phase 2 (XAI Engine): Kaggle build
+# Risk-Controlled Explainable Defect Inspection
 
-Adapts `PROJECT.md`'s Weeks 1–7 scope to run end-to-end in a Kaggle notebook,
-against:
+**Faithfulness-gated, drift-aware conformal risk control for industrial visual inspection.**
 
-- **PCB defects**: [`akhatova/pcb-defects`](https://www.kaggle.com/datasets/akhatova/pcb-defects)
-- **NEU surface defects**: [`kaustubhdikshit/neu-surface-defect-database`](https://www.kaggle.com/datasets/kaustubhdikshit/neu-surface-defect-database)
+An inspection system should not report a confidence score. It should report a
+**guarantee**. Given a target defect escape rate `α`, this system either
 
-## Fastest way to run this
+1. returns an operating point whose escape rate is **certified** at or below `α`
+   — finite-sample, distribution-free — at the lowest human review load it can
+   prove is safe; or
+2. **refuses**, because no such operating point exists for this detector and this
+   `α`, and hands the line back to full human review.
 
-Open `notebook/VisionQA_Phase1_Phase2.ipynb` in Kaggle (upload it, or copy its
-cells into a fresh notebook), attach both datasets under **Add Data**, turn on
-a GPU, and run top to bottom. The notebook writes the `src/` package shown
-below into `/kaggle/working/src` itself — you don't need to separately upload
-this repo, the notebook *is* the whole deliverable if you just want to click
-run. If you'd rather work from the package directly (e.g. push it to your own
-repo and `%cd`/`import` from Kaggle), the same files are laid out below in
-`src/`.
+The refusal branch matters as much as the first. A method that always answers is
+a method that sometimes lies.
 
-## Directory layout
+---
+
+## Contributions
+
+| | Contribution | Gap it fills |
+|---|---|---|
+| **C1** | Instance-level escape risk with per-class severity budgets (Mondrian) | Prior conformal work on surface defects ([arXiv:2504.17721](https://arxiv.org/abs/2504.17721), 2025) controls *pixel* FDR/FNR under a single global budget |
+| **C2** | Faithfulness-gated triage — explanation quality as a certified gating variable | No prior work uses explanation faithfulness as a control signal under a risk guarantee |
+| **C3** | Drift-aware recalibration with a long-run bound valid for adversarial sequences | Named explicitly as open future work in arXiv:2504.17721 |
+
+Validated on **5 industrial datasets** (9,468 images, 11,543 boxes, 28 classes)
+across **2 detector families**.
+
+## Headline results
+
+* **12/12** dataset × α combinations satisfy the escape guarantee on held-out test data.
+* After an abrupt regime shift a **static** conformal threshold degrades to a
+  **0.9618 escape rate — 9.6× its 0.10 target**; the adaptive controller holds **0.1007**.
+* Drift monitor: **0** false alarms over 1,500 exchangeable parts, 122-part detection latency.
+* Audited faithfulness (25 NEU test images, occlusion saliency): insertion AUC
+  **0.753**, energy pointing **0.561** against a **0.302** chance level (1.86×).
+* Certificate-targeted active learning: **2.81×** defect lift in the top-50 acquisitions.
+
+## Quick start
+
+```bash
+# environment (CUDA 12.8 build of torch, cloned from a known-good env)
+./vqaenv/Scripts/python.exe -c "import torch; print(torch.cuda.is_available())"
+
+# property tests - if these fail nothing downstream means anything
+./vqaenv/Scripts/python.exe tests/test_conformal.py     # 9/9
+./vqaenv/Scripts/python.exe tests/test_adaptive.py      # 6/6
+```
+
+Then open **`notebook/VisionQA_RiskControlled_XAI.ipynb`**, select kernel
+**Python (vision_qa_xai)**, and Run All. It loads cached artefacts by default;
+set `RETRAIN = True` in the configuration cell to regenerate from raw data.
+
+## Reproducing from scratch
+
+```bash
+# 1. datasets -> COCO -> stratified train/cal/test -> YOLO layout
+python -m src.data.prepare_datasets --raw_dir data/raw --out_dir data/processed
+python -m src.data.splits_and_yolo
+
+# 2. detectors
+python -m src.evaluation.train_baselines --model rtdetr-l.pt   # main method
+python -m src.evaluation.train_baselines --model yolov8s.pt    # baseline
+
+# 3. cache predictions on the cal/test blocks
+python -m src.evaluation.dump_ultralytics_preds --results runs/results_rtdetr.json
+
+# 4. experiments
+python -m src.evaluation.run_risk_experiment --trials 100
+python scripts/compute_faithfulness.py 25 neu
+
+# 5. rebuild the notebook from source
+python -m src.paper.build_notebook
+```
+
+## Layout
 
 ```
-visionqa-kaggle/
-├── configs/config.yaml          # single source of truth (paths, model, training, XAI)
-├── src/
-│   ├── data/
-│   │   ├── neu_xml_to_coco.py   # NEU-DET PASCAL-VOC XML -> COCO  (run first)
-│   │   ├── prepare_pcb_coco.py  # PCB defects -> COCO (Roboflow export OR raw XML)
-│   │   ├── merge_coco.py        # unify label spaces, copy images, train/val/test split
-│   │   ├── dataset.py           # torch Dataset -> HF DeformableDetr input format
-│   │   └── transforms.py        # Albumentations train/val/synthetic-augmentation pipelines
-│   ├── models/
-│   │   └── detector.py          # Swin backbone + Deformable DETR (HF transformers)
-│   ├── segmentation/
-│   │   └── pseudo_mask.py       # GrabCut box->pixel-mask refinement + damage% calc
-│   ├── xai/
-│   │   ├── rollout.py           # Swin-aware attention rollout + gradient relevance (LRP-lite)
-│   │   └── overlay.py           # heatmap + box + mask PNG rendering
-│   ├── train.py                 # training loop (M2 milestone)
-│   ├── evaluate.py              # COCO mAP eval (M2 milestone target: >95% mAP)
-│   └── inference.py             # full pipeline -> PROJECT.md §1.5 handoff JSON (M3 milestone)
-└── notebook/
-    └── VisionQA_Phase1_Phase2.ipynb   # drives all of the above on Kaggle
+src/
+  risk/
+    conformal.py       CRC, Learn-then-Test (Hoeffding-Bentkus), Mondrian, escape loss
+    adaptive.py        online risk control under drift + KS drift monitor
+    triage.py          AUTO_ACCEPT / HUMAN_REVIEW / AUTO_REJECT under LTT certification
+  xai/
+    faithfulness.py    insertion/deletion AUC, pointing game, energy pointing, sanity check
+    detector_saliency.py  occlusion saliency + audited faithfulness (black-box)
+    rollout.py         Swin attention rollout, gradient relevance
+  agentic/
+    inspector.py       closed-loop agent, certificate-targeted active learning
+  data/                dataset converters, stratified splits, YOLO export
+  evaluation/          training, prediction caching, risk experiments
+  paper/               figures and the notebook generator
+tests/                 property tests for every guarantee claimed
+notebook/              the single end-to-end notebook
+figures/               PDF + PNG at 300 dpi
 ```
 
-## Three deliberate deviations from `PROJECT.md` — and why
+## Design decisions worth knowing
 
-**1. NEU-DET is PASCAL-VOC XML, not COCO.** `neu_xml_to_coco.py` walks the
-dataset tree for `*.xml` files, matches each to its image by filename stem
-(robust to the couple of different folder layouts this dataset has been
-re-uploaded under on Kaggle), and writes one COCO json. `prepare_pcb_coco.py`
-reuses the exact same converter for PCB defects if you're using the raw
-Kaggle XML download rather than a Roboflow COCO export — the two datasets are
-shaped identically on disk (VOC XML + images).
+**Why RT-DETR and not YOLO as the main method.** RT-DETR is NMS-free. NMS is a
+score-dependent filter whose behaviour changes with box density, and conformal
+calibration is a statement about precisely the score distribution NMS reshapes.
+An end-to-end set-prediction head lets calibration target the model's own output.
+YOLOv8s is included as a baseline for the comparison table.
 
-**2. Segmentation is GrabCut, not a trained Mask2Former.** Neither
-`akhatova/pcb-defects` nor `kaustubhdikshit/neu-surface-defect-database` ships
-polygon/pixel-level annotations — both are bounding-box only, on Kaggle and
-upstream. `PROJECT.md`'s Mask2Former head needs mask ground truth to train
-against; without it, "training" one would just teach it to reproduce
-rectangles, at real implementation cost for no pixel-accuracy gain over the
-box itself. `src/segmentation/pseudo_mask.py` instead runs OpenCV **GrabCut**,
-initialized with each detected box as the foreground prior, to get a genuine
-pixel-accurate mask with no training required — `damage_pct` is computed from
-that real mask, matching `PROJECT.md`'s formula
-(`defective_pixel_area / total_component_area × 100`). If you later get real
-polygon labels (e.g. SAM-assisted labeling on a sample), swap this one module
-for a trained Mask2Former head; nothing downstream (the overlay renderer, the
-handoff JSON schema, the decision rule) needs to change.
+**Why a dedicated `cal` split.** CRC requires calibration data exchangeable with
+test *and* untouched by model fitting. Reusing a validation set that early
+stopping looked at breaks exchangeability and silently voids the guarantee.
 
-**3. LRP is approximated with gradient×input, not hand-rolled attention-LRP.**
-`PROJECT.md` itself notes standard LRP conservation rules aren't solved
-off-the-shelf for softmax/attention layers (citing Chefer et al. 2021).
-Rather than implement a bespoke, likely-fragile relevance-propagation rule set
-for Deformable DETR's sparse deformable attention, `src/xai/rollout.py` uses
-Captum's `InputXGradient` — a robust, well-understood per-pixel relevance
-method — as the practical stand-in. Swin's own windowed self-attention *does*
-get a real, window-aware attention-rollout implementation (with the window-
-merging handling `PROJECT.md` calls out as necessary), and the two are fused
-for the final heatmap overlay.
+**Why occlusion saliency and not Grad-CAM.** The faithfulness score gates the
+triage policy, so it must be computable for any detector the framework wraps —
+including a vendor binary with no accessible internals. Occlusion needs only
+`predict()`.
 
-## Setup
+**Why the agent is a control loop and not an LLM.** Every action it takes must be
+one a certificate can license or refuse. An LLM in that seat produces confident
+prose with no guarantee attached — the exact failure mode this work argues against.
 
-```
-pip install -r requirements.txt
-```
-(Kaggle notebooks already have `torch`/`torchvision`/`opencv`/`matplotlib`
-preinstalled — this file only lists what needs an explicit install there.)
+## Known limitations
 
-## Config
-
-Everything path/model/training/XAI-related lives in `configs/config.yaml`.
-The two things you'll actually need to change per Kaggle session are
-`paths.pcb_raw_dir` / `paths.neu_raw_dir` (match whatever "Add Data" mounted
-your datasets as) and `data.pcb_format` (`"voc"` for the raw Kaggle download,
-`"coco"` if you've re-exported through Roboflow).
-
-## Not included here (deliberately out of scope for Phase 1/2)
-
-- TensorRT/INT8 export and the >30 FPS RTX 4070/4090 benchmark (Objective 5)
-  — needs the actual target workstation to validate against.
-- Phase 3 (agentic reasoning) / Phase 4 (active learning) — Shruhath's half.
+* **Exchangeability.** The split-conformal guarantee needs the calibration block
+  to be exchangeable with production. The adaptive layer addresses drift, but its
+  bound is long-run, not per-part.
+* **Calibration size.** On the negative-heavy datasets only ~55 calibration images
+  carry a defect, so the `B/(n+1)` penalty alone consumes roughly a third of an
+  `α = 0.05` budget. Tight budgets on rare classes need more labelled defects —
+  and the method says so by refusing rather than by quietly degrading.
+* **Faithfulness cost.** The audited score is reported on a sample; the full
+  policy sweep uses a confidence-margin proxy because occlusion saliency costs
+  `G²` forward passes per image.
+* **Benchmark comparability.** Published numbers quoted in the comparison figure
+  were obtained on other authors' splits.
