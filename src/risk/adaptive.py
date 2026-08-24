@@ -189,8 +189,12 @@ class DriftMonitor:
         if self._streak < self.persistence:
             return None
 
+        # Latch: reset the streak so a single drift event produces one alarm
+        # rather than one per part for the rest of the run. Without this the
+        # caller sees hundreds of duplicate alarms for the same event and any
+        # alarm-triggered action fires repeatedly.
+        self._streak = 0
         rec = {"t": self._t, "ks_stat": float(stat), "p_value": float(p),
-               "streak": self._streak,
                "window_mean": float(np.mean(self.buffer)),
                "reference_mean": float(self.reference_scores.mean())}
         self.alarms.append(rec)

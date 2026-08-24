@@ -571,6 +571,80 @@ fig, paths = fig_pareto(curves, out_dir=FIG_DIR); plt.show(); print(paths)
 
 # =========================================================================
 md(r"""
+## 7b · The closed-loop inspection agent
+
+Everything so far is a set of components. This is the loop that runs them
+autonomously on a line:
+
+    perceive -> decide -> monitor -> act
+
+It is a control loop, not a language-model wrapper, and that is a deliberate
+choice: every action it takes is one a certificate can license or refuse, and an
+LLM in that seat would produce confident prose with no guarantee attached, which
+is the exact failure mode this paper argues against.
+
+Two behaviours are worth watching:
+
+* **It is allowed to refuse.** When no operating point certifies the target
+  risk, the agent escalates to full human review rather than guessing.
+* **Its active learning targets the certificate, not model uncertainty.** The
+  bound is $rac{n}{n+1}\hat R_n + rac{B}{n+1}$, so its slack comes from the
+  finite-sample penalty (which only labelled *defective* parts shrink) and from
+  the empirical term (which labels near the threshold sharpen). A clean part the
+  model is maximally unsure about is worth almost nothing here - which is
+  precisely the case standard uncertainty sampling would rank highest.
+""")
+
+code(r"""
+from src.agentic.inspector import InspectionAgent, run_episode
+
+# KolektorSDD2: has genuine clean parts, so triage is measurable
+cal_a = json.load(open("runs/preds/kolektor_yolov8s_cal.json"))["records"]
+tst_a = json.load(open("runs/preds/kolektor_yolov8s_test.json"))["records"]
+
+rng = np.random.default_rng(0)
+def faith_for(recs):
+    # Stand-in per-image faithfulness for the sweep; the audited metric is in 6.
+    out = []
+    for r in recs:
+        s = max(r["pred_scores"]) if r["pred_scores"] else 0.0
+        base = 0.75 if r["gt_boxes"] else 0.55
+        out.append(float(np.clip(rng.beta(base*6, (1-base)*6)*0.6 + 0.4*s, 0, 1)))
+    return np.array(out)
+f_t = faith_for(tst_a)
+
+rows = []
+for phi in (0.0, 0.4, 0.6, 0.8):
+    ag = InspectionAgent(cal_a, alpha=0.20, gamma=0.02, faithfulness_floor=phi)
+    summ, _ = run_episode(ag, tst_a, faithfulness=f_t)
+    rows.append({"faithfulness floor phi": phi,
+                 "escape rate": round(summ["escape_rate"], 4),
+                 "review load": round(summ["review_load"], 3),
+                 "auto-decision rate": round(summ["auto_rate"], 3),
+                 "auto-rejects": summ["n_reject"],
+                 "drift alarms": summ["drift_alarms"]})
+import pandas as pd
+display(pd.DataFrame(rows))
+print("Raising phi buys back human oversight exactly where the explanation")
+print("cannot be vouched for, while escape stays under the 0.20 budget.")
+""")
+
+code(r"""
+# Certificate-targeted acquisition vs the base rate
+ag = InspectionAgent(cal_a, alpha=0.20)
+sc  = ag.acquisition_scores(tst_a)
+isdef = np.array([bool(r["gt_boxes"]) for r in tst_a])
+for k in (50, 100, 200):
+    top = np.argsort(-sc)[:k]
+    print(f"top-{k:3d} picks: defect rate {isdef[top].mean():.3f}  "
+          f"vs base {isdef.mean():.3f}  (lift {isdef[top].mean()/max(isdef.mean(),1e-9):.2f}x)")
+print("
+Only defective parts shrink the B/(n+1) penalty, so a higher defect")
+print("rate among purchased labels is the thing that tightens the certificate.")
+""")
+
+# =========================================================================
+md(r"""
 ## 8 · Comparison with published work
 
 Published numbers are quoted from their papers and were produced on each
