@@ -638,8 +638,8 @@ for k in (50, 100, 200):
     top = np.argsort(-sc)[:k]
     print(f"top-{k:3d} picks: defect rate {isdef[top].mean():.3f}  "
           f"vs base {isdef.mean():.3f}  (lift {isdef[top].mean()/max(isdef.mean(),1e-9):.2f}x)")
-print("
-Only defective parts shrink the B/(n+1) penalty, so a higher defect")
+print()
+print("Only defective parts shrink the B/(n+1) penalty, so a higher defect")
 print("rate among purchased labels is the thing that tightens the certificate.")
 """)
 
