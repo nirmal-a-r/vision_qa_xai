@@ -71,7 +71,8 @@ RTDETR_OVERRIDES = {
 }
 
 
-def train_one(name, data_yaml, model_name, out_dir, seed=0, device=0, override=None):
+def train_one(name, data_yaml, model_name, out_dir, seed=0, device=0, override=None,
+              run_tag="baseline"):
     cfg = dict(CONFIGS[name])
     if "rtdetr" in model_name.lower():
         cfg.update(RTDETR_OVERRIDES.get(name, {}))
@@ -92,7 +93,7 @@ def train_one(name, data_yaml, model_name, out_dir, seed=0, device=0, override=N
         seed=seed,
         device=device,
         project=out_dir,
-        name=f"{name}_{model_name.replace('.pt', '')}_s{seed}",
+        name=f"{name}_{model_name.replace('.pt', '')}_{run_tag}_s{seed}",
         exist_ok=True,
         patience=40,
         workers=0,             # Windows: worker spawn re-imports, keep in-process
@@ -142,6 +143,10 @@ def main():
     ap.add_argument("--datasets", default="neu,magnetic_tile,kolektor,gc10,pcb")
     ap.add_argument("--seeds", default="0")
     ap.add_argument("--results", default="runs/baseline_results.json")
+    # Encoding is part of the experiment identity, not a path detail: the same
+    # model+dataset+seed trained on grey-x3 and on CCE are two different runs
+    # and must not collide in the resume check.
+    ap.add_argument("--encoding", default="baseline", help="baseline | cce")
     a = ap.parse_args()
 
     all_res = []
@@ -157,11 +162,15 @@ def main():
                 print(f"[{name}] skipped: no {data_yaml}")
                 continue
             if any(r["dataset"] == name and r["seed"] == seed and r["model"] == a.model
+                   and r.get("encoding", "baseline") == a.encoding
                    for r in all_res):
                 print(f"[{name}] seed {seed} already done, skipping")
                 continue
             try:
-                all_res.append(train_one(name, data_yaml, a.model, a.out_dir, seed=seed))
+                r = train_one(name, data_yaml, a.model, a.out_dir, seed=seed,
+                              run_tag=a.encoding)
+                r["encoding"] = a.encoding
+                all_res.append(r)
             except Exception as e:
                 import traceback
                 traceback.print_exc()
