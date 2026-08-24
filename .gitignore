@@ -17,3 +17,7 @@ logs/
 
 # notebook checkpoints
 .ipynb_checkpoints/
+
+# downloaded pretrained weights
+weights_cache/
+figures/

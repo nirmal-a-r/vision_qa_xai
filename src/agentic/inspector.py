@@ -85,8 +85,16 @@ class InspectionAgent:
 
     def __init__(self, cal_records, alpha, grid=None, gamma=0.02,
                  faithfulness_floor=0.0, label_budget_per_alarm=50,
-                 iou_thresh=0.5, drift_window=200):
+                 iou_thresh=0.5, drift_window=200, max_false_scrap=0.05):
         self.alpha = alpha
+        # Upper threshold budget. Without it the policy has ONE threshold, the
+        # review band is empty by construction, and every part that is not
+        # certifiably clean is scrapped - on KolektorSDD2 that meant rejecting
+        # 834 of 834 parts, i.e. scrapping all of production. A second
+        # threshold is what separates "not provably clean" from "confidently
+        # defective"; only the gap between them is what a human ever sees.
+        self.max_false_scrap = max_false_scrap
+        self.lam_hi = 1.0
         self.grid = grid if grid is not None else escape_threshold_grid(201)
         self.iou_thresh = iou_thresh
         self.phi = faithfulness_floor
@@ -134,8 +142,41 @@ class InspectionAgent:
             self.state.certified = False
             self.state.escalated = True
             self.state.lam = 0.0
+        self._calibrate_upper()
         self.state.recalibrations += 1
         return self.state.lam
+
+    def _calibrate_upper(self):
+        """Lowest threshold at which auto-rejecting is still precise enough.
+
+        Scanning downwards, keep the smallest t for which the parts scoring >= t
+        on the calibration set are defective at least (1 - max_false_scrap) of
+        the time. Lower t means more parts auto-rejected and fewer sent to a
+        human, so taking the smallest admissible t minimises review load subject
+        to the scrap budget - the same objective the offline triage policy
+        optimises, computed online from the same held-out block.
+
+        Falls back to 1.0 (auto-reject disabled, everything above lam goes to
+        review) when no threshold is precise enough. That is the safe direction:
+        it costs inspector time, never a wrongly scrapped part.
+        """
+        scores = self._cal_scores()
+        defect = np.asarray([bool(r.get("gt_boxes")) for r in self.cal_records])
+        if scores.size == 0 or not defect.any():
+            self.lam_hi = 1.0
+            return self.lam_hi
+        best = 1.0
+        for t in np.unique(np.round(scores, 4))[::-1]:
+            sel = scores >= t
+            if sel.sum() < 5:                      # too few to estimate precision
+                continue
+            false_scrap = float((~defect[sel]).mean())
+            if false_scrap <= self.max_false_scrap:
+                best = float(t)
+            else:
+                break                              # precision only degrades further down
+        self.lam_hi = max(best, self.state.lam)    # never invert the two thresholds
+        return self.lam_hi
 
     # -- per-part loop ----------------------------------------------------
     def step(self, record, faithfulness=None, ground_truth_available=False):
@@ -151,11 +192,11 @@ class InspectionAgent:
         if st.escalated:
             decision = REVIEW
         elif smax < st.lam:
-            decision = ACCEPT
-        elif faith >= self.phi:
-            decision = REJECT
+            decision = ACCEPT                      # certified clean
+        elif smax >= self.lam_hi and faith >= self.phi:
+            decision = REJECT                      # confidently defective AND explainably so
         else:
-            decision = REVIEW
+            decision = REVIEW                      # the band a human actually sees
 
         if decision == ACCEPT:
             st.n_accept += 1
@@ -188,7 +229,8 @@ class InspectionAgent:
         if alarm:
             self._on_drift(record)
 
-        self.log.append({"t": st.n_parts, "lambda": st.lam, "decision": decision,
+        self.log.append({"t": st.n_parts, "lambda": st.lam, "lambda_hi": self.lam_hi,
+                         "decision": decision,
                          "score": smax, "faith": faith, "defect": has_defect,
                          "alarm": bool(alarm), "escalated": st.escalated})
         return decision
