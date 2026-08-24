@@ -48,31 +48,61 @@ across **2 detector families**.
 ./vqaenv/Scripts/python.exe tests/test_adaptive.py      # 6/6
 ```
 
-Then open **`notebook/VisionQA_RiskControlled_XAI.ipynb`**, select kernel
-**Python (vision_qa_xai)**, and Run All. It loads cached artefacts by default;
-set `RETRAIN = True` in the configuration cell to regenerate from raw data.
+### Run the notebook
+
+```bash
+# one-time: register the project kernel so the notebook has one to select
+./vqaenv/Scripts/python.exe -m ipykernel install --user     --name vision_qa_xai --display-name "Python (vision_qa_xai)"
+```
+
+Then open **`notebook/VisionQA_RiskControlled_Inspection.ipynb`**, select kernel
+**Python (vision_qa_xai)**, and Run All. It reads cached artefacts from `runs/`
+and `figures/`, so a full pass takes minutes and needs no GPU.
+
+### Or regenerate everything from raw data
+
+```bash
+python scripts/run_pipeline.py                # datasets -> training -> analysis -> notebook
+python scripts/run_pipeline.py --skip-train   # reuse existing weights
+python scripts/run_pipeline.py --wait-for-gpu # block until the GPU is free first
+```
+
+Every stage is resumable, so an interrupted sweep restarts where it stopped
+rather than from the beginning.
 
 ## Reproducing from scratch
+
+`scripts/run_pipeline.py` chains these; run them individually to inspect a stage.
 
 ```bash
 # 1. datasets -> COCO -> stratified train/cal/test -> YOLO layout
 python -m src.data.prepare_datasets --raw_dir data/raw --out_dir data/processed
 python -m src.data.splits_and_yolo
 
-# 2. detectors
-python -m src.evaluation.train_baselines --model rtdetr-l.pt   # main method
-python -m src.evaluation.train_baselines --model yolov8s.pt    # baseline
+# 2. Complementary Channel Encoding copies of the trees
+python -m src.data.build_cce_dataset
 
-# 3. cache predictions on the cal/test blocks
-python -m src.evaluation.dump_ultralytics_preds --results runs/results_rtdetr.json
+# 3. detectors (baseline and CCE arms)
+python -m src.evaluation.train_baselines --model rtdetr-l.pt
+python -m src.evaluation.train_baselines --model yolov8s.pt
+python -m src.evaluation.train_baselines --model yolov8s.pt     --encoding cce --yolo_dir data/yolo_cce
 
-# 4. experiments
-python -m src.evaluation.run_risk_experiment --trials 100
+# 4. cache predictions once, then every analysis reads that cache
+python scripts/run_all_experiments.py
 python scripts/compute_faithfulness.py 25 neu
 
 # 5. rebuild the notebook from source
 python -m src.paper.build_notebook
 ```
+
+### Repository hygiene
+
+```bash
+python scripts/find_dead_code.py    # import-graph reachability over src/
+```
+
+The legacy Deformable-DETR pipeline this project started from was removed once
+the reachability check showed nothing reached it; it remains in git history.
 
 ## Layout
 

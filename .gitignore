@@ -20,4 +20,7 @@ logs/
 
 # downloaded pretrained weights
 weights_cache/
-figures/
+
+# figures ARE tracked: they are the paper deliverable and only ~10 MB.
+# Regenerable from the notebook, but a repo a reviewer clones should render
+# its own README diagrams without a GPU run first.
