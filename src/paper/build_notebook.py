@@ -381,6 +381,21 @@ display(df_m)
 print("Refusals are informative: that class cannot meet its budget with this detector.")
 """)
 
+code(r"""
+# F6: realised vs targeted per-class risk
+from src.paper.figures import fig_mondrian
+names = {i: n for i, n in enumerate(
+    ["crazing","inclusion","patches","pitted_surface","rolled-in_scale","scratches"])}
+real   = {names.get(k, str(k)): (v.get("empirical_risk") or 0.0)
+          for k, v in sorted(res.items()) if v.get("lambda") is not None}
+target = {names.get(k, str(k)): v["alpha"]
+          for k, v in sorted(res.items()) if v.get("lambda") is not None}
+if real:
+    fig, paths = fig_mondrian(real, target, out_dir=FIG_DIR); plt.show(); print(paths)
+else:
+    print("no class met its budget - nothing to plot")
+""")
+
 # =========================================================================
 md(r"""
 ## 5 · Drift-aware recalibration (C3)
@@ -483,6 +498,43 @@ for name, mk in maps.items():
                  "faithfulness": round(faithfulness_score(m, boxes), 3)})
 display(pd.DataFrame(rows))
 print("Chance-corrected: a uniform map scores 0, not the 0.04 its raw energy suggests.")
+""")
+
+md(r"""
+### Audited faithfulness on real detector outputs
+
+The metrics above are exercised on controlled maps; these are measured on the
+trained detector. Saliency comes from **occlusion sensitivity** rather than a
+gradient or CAM method, deliberately: the faithfulness score gates the triage
+policy, so it must be computable for any detector the framework is applied to,
+including a vendor binary with no accessible internals. Occlusion needs only
+`predict`. The cost is an $8{\times}8$ grid of forward passes per image, which
+is why this is reported on a sample while the policy sweep in 7 uses a cheap
+proxy.
+""")
+
+code(r"""
+fp = "runs/faithfulness_neu.json"
+if os.path.exists(fp):
+    import pandas as pd
+    fr = pd.DataFrame(json.load(open(fp)))
+    summary = pd.DataFrame([{
+        "metric": "insertion AUC",     "mean": fr["insertion_auc"].mean(),   "std": fr["insertion_auc"].std(),
+    }, {
+        "metric": "energy pointing",   "mean": fr["energy_pointing"].mean(), "std": fr["energy_pointing"].std(),
+    }, {
+        "metric": "  (chance level)",  "mean": fr["chance_level"].mean(),    "std": fr["chance_level"].std(),
+    }, {
+        "metric": "pointing game",     "mean": fr["pointing_game"].mean(),   "std": fr["pointing_game"].std(),
+    }, {
+        "metric": "composite",         "mean": fr["faithfulness"].mean(),    "std": fr["faithfulness"].std(),
+    }]).round(3)
+    display(summary)
+    lift = fr["energy_pointing"].mean() / max(fr["chance_level"].mean(), 1e-9)
+    print(f"n = {len(fr)} NEU test images, occlusion saliency on an 8x8 grid")
+    print(f"attribution mass on defects is {lift:.2f}x the chance level set by box area")
+else:
+    print("run scripts/compute_faithfulness.py to generate", fp)
 """)
 
 # =========================================================================
