@@ -152,13 +152,41 @@ for nm, h in [("mass on defect", hm_perfect), ("uniform (no info)", hm_uniform),
 
 md("### Audited faithfulness on real detector outputs")
 code(r"""
-fp = "runs/faithfulness_results.json"
-if os.path.exists(fp):
-    fr = json.load(open(fp))
-    df_f = pd.DataFrame(fr if isinstance(fr, list) else fr.get("per_dataset", []))
-    print(df_f.to_string(index=False))
+import glob as _glob
+# compute_faithfulness.py writes ONE FILE PER DATASET,
+# runs/faithfulness_<dataset>.json. The old code looked for a combined
+# runs/faithfulness_results.json that nothing ever writes, so this section
+# rendered its placeholder even with the data sitting on disk.
+fp_list = sorted(_glob.glob("runs/faithfulness_*.json"))
+if fp_list:
+    frames = []
+    for fp in fp_list:
+        ds = os.path.basename(fp).replace("faithfulness_", "").replace(".json", "")
+        rows = json.load(open(fp))
+        if not rows: continue
+        d = pd.DataFrame(rows); d.insert(0, "dataset", ds); frames.append(d)
+    df_f = pd.concat(frames, ignore_index=True)
+    summary = (df_f.groupby("dataset").agg(images=("faithfulness","size"),
+               insertion_auc=("insertion_auc","mean"), energy_pointing=("energy_pointing","mean"),
+               chance_level=("chance_level","mean"), pointing_game=("pointing_game","mean"),
+               faithfulness=("faithfulness","mean")).reset_index())
+    summary["lift_over_chance"] = summary.energy_pointing / summary.chance_level
+    print(summary.round(4).to_string(index=False))
+    fig, axes = plt.subplots(1, 2, figsize=(11, 3.6))
+    axes[0].hist(df_f.faithfulness, bins=20, color=F.OKABE[0], edgecolor="white")
+    axes[0].set_title("per-image faithfulness"); axes[0].set_xlabel("score")
+    axes[1].scatter(df_f.chance_level, df_f.energy_pointing, s=26, color=F.OKABE[0],
+                    alpha=.75, edgecolor="white", linewidth=.6)
+    _lim = [0, max(df_f.chance_level.max(), df_f.energy_pointing.max())*1.08]
+    axes[1].plot(_lim, _lim, ls="--", lw=1.2, color="#888888")
+    axes[1].set_xlim(_lim); axes[1].set_ylim(_lim)
+    axes[1].set_xlabel("chance level (box area fraction)"); axes[1].set_ylabel("energy pointing")
+    axes[1].set_title("above the diagonal = better than chance")
+    for _a in axes: _a.grid(alpha=.25)
+    fig.tight_layout(); F.save(fig, "fig14_faithfulness"); plt.show()
+    print(f"{(df_f.energy_pointing > df_f.chance_level).mean()*100:.0f}% of maps beat chance.")
 else:
-    print("run scripts/run_faithfulness.py to populate this section")
+    print("no faithfulness cache; run: python scripts/compute_faithfulness.py 25 neu")
 """)
 
 md(r"""

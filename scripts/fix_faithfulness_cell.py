@@ -9,7 +9,8 @@ import json, io, glob, sys
 
 NB = "notebook/VisionQA_RiskControlled_Inspection.ipynb"
 
-CODE = r'''# Audited faithfulness. compute_faithfulness.py writes one file per dataset,
+CODE = r'''import glob  # figures.py exposes OKABE, not a C dict; glob is not in the setup cell
+# Audited faithfulness. compute_faithfulness.py writes one file per dataset,
 # runs/faithfulness_<dataset>.json, each a list of per-image records.
 fp_list = sorted(glob.glob("runs/faithfulness_*.json"))
 if not fp_list:
@@ -42,20 +43,20 @@ else:
     print(summary.round(4).to_string(index=False))
 
     fig, axes = plt.subplots(1, 3, figsize=(13, 3.6))
-    axes[0].hist(df_f.faithfulness, bins=20, color=F.C["primary"], edgecolor="white")
+    axes[0].hist(df_f.faithfulness, bins=20, color=F.OKABE[0], edgecolor="white")
     axes[0].set_title("per-image faithfulness"); axes[0].set_xlabel("score")
 
     axes[1].scatter(df_f.chance_level, df_f.energy_pointing, s=26,
-                    color=F.C["primary"], alpha=.75, edgecolor="white", linewidth=.6)
+                    color=F.OKABE[0], alpha=.75, edgecolor="white", linewidth=.6)
     lim = [0, max(df_f.chance_level.max(), df_f.energy_pointing.max()) * 1.08]
-    axes[1].plot(lim, lim, ls="--", lw=1.2, color=F.C["muted"])
+    axes[1].plot(lim, lim, ls="--", lw=1.2, color="#888888")
     axes[1].set_xlim(lim); axes[1].set_ylim(lim)
     axes[1].set_xlabel("chance level (box area fraction)")
     axes[1].set_ylabel("energy pointing")
     axes[1].set_title("above the diagonal = better than chance")
 
     axes[2].scatter(df_f.insertion_auc, df_f.faithfulness, s=26,
-                    color=F.C["accent"], alpha=.75, edgecolor="white", linewidth=.6)
+                    color=F.OKABE[1], alpha=.75, edgecolor="white", linewidth=.6)
     axes[2].set_xlabel("insertion AUC"); axes[2].set_ylabel("composite faithfulness")
     axes[2].set_title("causal vs localisation agreement")
     for a in axes:
