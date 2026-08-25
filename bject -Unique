@@ -1,0 +1,18 @@
+da019d50 | Meera S Raj | vv2006n2011@gmail.com | Reduce notebook/ to deliverables only
+1bd6a67e | Meera S Raj | vv2006n2011@gmail.com | Add VisionQA_Complete.ipynb: one self-contained notebook for the whole project
+3b24237f | Meera S Raj | vv2006n2011@gmail.com | Populate drift and triage sections; fix faithfulness cell wiring
+707a9d85 | Meera S Raj | vv2006n2011@gmail.com | Clean repo for release: remove legacy pipeline, register kernel, fix README
+e28a6681 | Meera S Raj | vv2006n2011@gmail.com | Fix degenerate single-threshold agent policy; add Qwen/Ollama narration layer
+2c2a59cb | Meera S Raj | vv2006n2011@gmail.com | Add Complementary Channel Encoding (CCE) and photometric analysis
+02b603aa | Meera S Raj | vv2006n2011@gmail.com | YOLOv8s baseline complete on all 5 datasets; risk experiment extended
+f07e59f1 | Meera S Raj | vv2006n2011@gmail.com | Rewrite README for the risk-control project
+8e54dc3b | Meera S Raj | vv2006n2011@gmail.com | Add audited faithfulness on real detector outputs, and the Mondrian figure
+3aff7727 | Meera S Raj | vv2006n2011@gmail.com | Add agentic section to notebook; 31 cells run clean
+5dc85d09 | Meera S Raj | vv2006n2011@gmail.com | Add closed-loop inspection agent with certificate-targeted active learning
+a494c78f | Meera S Raj | vv2006n2011@gmail.com | Add publication figure suite and the end-to-end notebook
+fda2bf5c | Meera S Raj | vv2006n2011@gmail.com | Real-data conformal validation across 3 datasets; fix selection bias in reporting
+1dc01c3d | Meera S Raj | vv2006n2011@gmail.com | Add drift-aware adaptive risk control
+e5674887 | Meera S Raj | vv2006n2011@gmail.com | Add triage policy, faithfulness metrics, and 5-dataset converters
+2134642e | Meera S Raj | vv2006n2011@gmail.com | Add conformal risk control core with validated guarantees
+000128e4 | Meera S Raj | vv2006n2011@gmail.com | Fix transformers v5 compat, COCO category mapping, DETR convergence defaults, inference threshold
+bdeb19bd | MeeraSRaj | mithunsrajrajesh@gmail.com | Initial commit

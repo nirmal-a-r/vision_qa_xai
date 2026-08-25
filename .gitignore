@@ -1,0 +1,26 @@
+# environments
+vqaenv/
+*.venv/
+__pycache__/
+*.pyc
+
+# data and run artifacts (large, regenerable)
+data/
+work/
+runs/
+outputs/
+checkpoints/
+logs/
+*.pt
+*.pth
+*.zip
+
+# notebook checkpoints
+.ipynb_checkpoints/
+
+# downloaded pretrained weights
+weights_cache/
+
+# figures ARE tracked: they are the paper deliverable and only ~10 MB.
+# Regenerable from the notebook, but a repo a reviewer clones should render
+# its own README diagrams without a GPU run first.
