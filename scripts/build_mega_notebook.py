@@ -30,7 +30,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
 
-SRC_NB = "notebook/VisionQA_RiskControlled_Inspection.ipynb"
+# Build input, kept out of notebook/ so that folder holds only deliverables.
+SRC_NB = "scripts/_build_inputs/notebook_source.ipynb"
 OUT_NB = "notebook/VisionQA_Complete.ipynb"
 
 # Dependency order: a module must appear after everything it imports.

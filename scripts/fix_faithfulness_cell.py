@@ -7,7 +7,7 @@ placeholder even when the data was sitting on disk.
 """
 import json, io, glob, sys
 
-NB = "notebook/VisionQA_RiskControlled_Inspection.ipynb"
+NB = "scripts/_build_inputs/notebook_source.ipynb"
 
 CODE = r'''import glob  # figures.py exposes OKABE, not a C dict; glob is not in the setup cell
 # Audited faithfulness. compute_faithfulness.py writes one file per dataset,
