@@ -111,6 +111,30 @@ def train_one(name, data_yaml, model_name, out_dir, seed=0, device=0, override=N
     )
     dt = time.time() - t0
 
+    # A killed run still returns from model.train() and still evaluates, so it
+    # lands in results_*.json looking like a finished experiment - and the
+    # resume check then treats it as done and never retrains it. Two runs
+    # reached the results file this way (gc10+cce at 5/120 epochs -> 0.3765,
+    # neu rtdetr+cce at 2/100 -> 0.0614) and dragged the CCE ablation mean down
+    # by 18pp. Verify the trainer actually walked the schedule before recording.
+    completed = None
+    try:
+        import csv as _csv
+        _rf = os.path.join(str(getattr(model.trainer, "save_dir", "")), "results.csv")
+        if os.path.exists(_rf):
+            completed = sum(1 for _ in _csv.DictReader(open(_rf)))
+    except Exception:
+        completed = None
+    if completed is not None:
+        # `patience` can stop early legitimately, so allow that; anything that
+        # covered less than a third of the schedule was interrupted.
+        if completed < max(3, cfg["epochs"] // 3):
+            raise RuntimeError(
+                f"[{name}] run did not complete: {completed}/{cfg['epochs']} epochs "
+                f"in {dt/60:.1f} min. Refusing to record a partial result - it would "
+                f"be indistinguishable from a converged one in results_*.json."
+            )
+
     # Evaluate on the held-out TEST block (ultralytics 'val' points at our
     # calibration block, which must not be used to report accuracy).
     metrics = model.val(data=os.path.abspath(data_yaml), split="test",
