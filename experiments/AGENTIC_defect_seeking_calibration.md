@@ -87,3 +87,56 @@ which is a different objective and a different validity problem. Searches for
 active *calibration* selection surfaced the obstacle - adaptive selection breaks
 exchangeability - but no method that exploits a known selection rule to keep
 validity while seeking defects.
+
+---
+
+## Result 4 (new) - the obvious correction cancels the benefit
+
+Inverse-propensity weighting is the textbook fix for a known sampling law, and it
+was implemented (`src/risk/acquisition.py`) and tested. It does not work here.
+
+KolektorSDD2, budget 100, alpha = 0.10, 300 replicates:
+
+| gamma | weight clip | defects bought | certificate issued | realised risk |
+|---:|---:|---:|---:|---:|
+| 0 (random) | none | 10.3 | 0.0% | - |
+| 1 | none | 49.3 | 0.0% | - |
+| 3 | none | 50.3 | 0.0% | - |
+| 1 | 5x | 49.3 | 3.3% | 0.1191 |
+| 3 | 5x | 50.3 | 0.0% | - |
+| 3 | 20x | 50.3 | 0.0% | - |
+
+**Why.** Weighted CRC charges the unobserved test point at the worst weight it
+could carry:
+
+    R(t) = ( sum_i w_i 1{c_i < t} + w_max ) / ( sum_i w_i + w_max )
+
+With uniform weights that term is 1/(n+1) and behaves. Under a gamma = 3 screen
+the weight ratio w_max / w_min is enormous, so w_max alone dominates both sums
+and the certified risk never falls below alpha at any useful threshold. The
+screen buys 5x more defects and the correction gives all of it back - and then
+some, because the naive estimator at least issued 83% of the time.
+
+Weight clipping does not rescue it: clipping enough to issue (5x at gamma = 1)
+reintroduces exactly the bias the weights existed to remove (0.1191 against
+alpha = 0.10).
+
+## Where this leaves the agentic direction
+
+Honest state:
+
+* the **efficiency gain is real and large** - 8x more defects per label, and the
+  difference between a certificate 0% and 83% of the time;
+* the **bias is real but small** - 0.1011-0.1043 against 0.10;
+* the **textbook correction is unusable** - it destroys the effective sample size
+  and issues nothing.
+
+So the contribution is not "screen and reweight". Something with *bounded* weights
+by construction is needed - stratified acquisition with known stratum counts is
+the obvious candidate, since a stratified estimator's weights are fixed by design
+rather than by 1/pi. That is **untested** and is written here as the next
+experiment, not as a claim.
+
+Reporting all four results together is the honest framing: an acquisition policy
+that changes "no certificate" into "a certificate", a measured bias, and a
+demonstration that the obvious fix costs more than the bias it removes.
