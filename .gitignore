@@ -5,12 +5,17 @@ __pycache__/
 *.pyc
 
 # data and run artifacts (large, regenerable)
-data/
-work/
-runs/
-outputs/
-checkpoints/
-logs/
+# Leading slash anchors these to the repo ROOT. Without it, `data/` matches a
+# directory named data at ANY depth - which silently excluded src/data/ and
+# dropped the entire data pipeline (photometric.py, prepare_datasets.py,
+# splits_and_yolo.py, build_cce_dataset.py) from the repository. A fresh clone
+# could not prepare a dataset or build the CCE encoding at all.
+/data/
+/work/
+/runs/
+/outputs/
+/checkpoints/
+/logs/
 *.pt
 *.pth
 *.zip
