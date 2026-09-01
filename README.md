@@ -55,7 +55,7 @@ across **2 detector families**.
 ./vqaenv/Scripts/python.exe -m ipykernel install --user     --name vision_qa_xai --display-name "Python (vision_qa_xai)"
 ```
 
-Then open **`notebook/VisionQA_RiskControlled_Inspection.ipynb`**, select kernel
+Then open **`notebook/VisionQA_CertifiedInspection.ipynb`**, select kernel
 **Python (vision_qa_xai)**, and Run All. It reads cached artefacts from `runs/`
 and `figures/`, so a full pass takes minutes and needs no GPU.
 
@@ -65,10 +65,19 @@ and `figures/`, so a full pass takes minutes and needs no GPU.
 python scripts/run_pipeline.py                # datasets -> training -> analysis -> notebook
 python scripts/run_pipeline.py --skip-train   # reuse existing weights
 python scripts/run_pipeline.py --wait-for-gpu # block until the GPU is free first
+python scripts/run_rigor_audit.py             # IoU, stability, and workflow audit
 ```
 
 Every stage is resumable, so an interrupted sweep restarts where it stopped
 rather than from the beginning.
+
+### Certificate-quality reporting
+
+`scripts/run_rigor_audit.py` writes `runs/rigor_metrics.json` from cached
+predictions. It reports target issuance/refusal, IoU sensitivity (0.30/0.50/0.75),
+held-out Wilson intervals, calibration-bootstrap threshold stability, review
+burden, and clean-review rate. These are empirical diagnostics; the CRC
+finite-sample guarantee remains the pre-specified calibration procedure.
 
 ## Reproducing from scratch
 

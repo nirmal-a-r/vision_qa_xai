@@ -38,8 +38,10 @@ OUT_NB = "notebook/VisionQA_Complete.ipynb"
 MODULES = [
     "src/paper/figures.py",
     "src/risk/conformal.py",
+    "src/risk/spi.py",
     "src/risk/adaptive.py",
     "src/risk/triage.py",
+    "src/evaluation/rigor.py",
     "src/data/photometric.py",
     "src/xai/faithfulness.py",
     "src/xai/detector_saliency.py",
@@ -196,6 +198,64 @@ else:
     print("analysis complete; re-run the cells below to pick up new numbers")
 '''
 
+AUDIT_MD = '''## Certificate-quality audit — measured diagnostics
+
+This companion audit makes the safety claim reviewable rather than presenting
+one favourable operating point. For every cached calibration/test pair it
+reports:
+
+* issuance/refusal at each target risk;
+* sensitivity to IoU = 0.30 / 0.50 / 0.75;
+* Wilson 95% intervals for *held-out observed* escape risk;
+* bootstrap calibration-threshold stability, retaining refusals explicitly;
+* review burden, auto-accept rate, and clean-review rate.
+
+The intervals and bootstraps are diagnostics, **not** extra certificates. The
+only finite-sample distribution-free statement is the pre-specified Conformal
+Risk Control calibration rule.
+'''
+
+AUDIT_CODE = '''import os, json
+from src.evaluation.rigor import audit_prediction_directory
+
+_root = os.path.abspath(os.getcwd())
+while _root != os.path.dirname(_root) and not os.path.isdir(os.path.join(_root, "runs")):
+    _root = os.path.dirname(_root)
+_pred_dir = os.path.join(_root, "runs", "preds")
+_audit_path = os.path.join(_root, "runs", "rigor_metrics.json")
+
+if not os.path.isdir(_pred_dir):
+    print("No cached predictions found; run the analysis pipeline first.")
+else:
+    # Rebuild when analysis ran in this session; otherwise reuse the reproducible cache.
+    if RUN_ANALYSIS or not os.path.exists(_audit_path):
+        audit_prediction_directory(_pred_dir, _audit_path, n_boot=400)
+    _audit = json.load(open(_audit_path, encoding="utf-8"))
+    _rows = []
+    for _tag, _pair in _audit["pairs"].items():
+        for _iou, _block in _pair["results"].items():
+            for _alpha, _r in _block["targets"].items():
+                if not _r["issued"]:
+                    continue
+                _st = _r["threshold_stability"]
+                _rows.append({"dataset": _tag.replace("_yolov8s", ""),
+                              "IoU": float(_iou), "alpha": float(_alpha),
+                              "threshold": round(_r["threshold"], 4),
+                              "held-out escape": round(_r["escape_risk"], 4),
+                              "escape 95%": f"[{_r['escape_wilson95_low']:.3f}, {_r['escape_wilson95_high']:.3f}]",
+                              "review %": round(100 * _r["review_burden"], 1),
+                              "bootstrap issue %": round(100 * _st["issue_rate"], 1)})
+    _df_audit = pd.DataFrame(_rows)
+    display(_df_audit)
+    if len(_df_audit):
+        _fig, _ax = plt.subplots(figsize=(7.5, 3.5))
+        for _d, _g in _df_audit[_df_audit["IoU"] == 0.5].groupby("dataset"):
+            _ax.plot(_g["alpha"], _g["review %"], "o-", label=_d, lw=1.5)
+        _ax.set(xlabel="certified escape budget alpha", ylabel="parts sent to review / reject (%)",
+                title="Safety–workflow frontier at IoU = 0.50")
+        _ax.legend(fontsize=7, ncol=2); _fig.tight_layout(); plt.show()
+'''
+
 
 def main():
     nb = json.load(io.open(SRC_NB, encoding="utf-8"))
@@ -235,7 +295,7 @@ def main():
 
     head = cells[:setup_idx + 1]
     body = cells[setup_idx + 1:train_at]
-    new = head + inline + body + extra + cells[train_at:]
+    new = head + inline + body + extra + cells[train_at:] + [md(AUDIT_MD), code(AUDIT_CODE)]
     nb["cells"] = new
     nb["metadata"]["kernelspec"] = {"display_name": "Python (vision_qa_xai)",
                                     "language": "python", "name": "vision_qa_xai"}

@@ -20,6 +20,7 @@ from src.risk.conformal import (
     escape_loss_curve,
     box_iou_matrix,
     RiskNotAchievable,
+    localization_robust_risk_control,
 )
 
 RNG = np.random.default_rng(0)
@@ -185,6 +186,25 @@ def test_iou_matches_hand_computation():
     exp = np.array([25 / 175, 1.0, 0.0])
     assert np.allclose(got, exp), f"{got} != {exp}"
     print("  IoU matches hand computation")
+
+
+def test_localization_robust_threshold_is_most_conservative():
+    """The multi-IoU deployment threshold must be <= every individual one."""
+    grid = escape_threshold_grid(51)
+    # First defect is only a loose-localisation hit; second is a strict hit.
+    records = []
+    for i in range(120):
+        if i % 3:
+            records.append({"gt_boxes": [[0, 0, 10, 10]],
+                            "pred_boxes": [[0, 0, 10, 10]], "pred_scores": [.4]})
+        else:
+            records.append({"gt_boxes": [[0, 0, 10, 10]],
+                            "pred_boxes": [[2, 2, 12, 12]], "pred_scores": [.4]})
+    res = localization_robust_risk_control(records, grid, .40, (0.30, 0.50))
+    assert res["issued"], res
+    individual = [v["threshold"] for v in res["per_iou"].values()]
+    assert res["threshold"] == min(individual)
+    print("  multi-IoU threshold is the pointwise-safe, most conservative threshold")
 
 
 if __name__ == "__main__":

@@ -86,11 +86,29 @@ def stratified_split(images, annotations, fractions=(0.60, 0.15, 0.25),
     return set(train), set(cal), set(test)
 
 
+# Which datasets actually need the calibration-heavy allocation.
+#
+# The allocation is a per-dataset design choice, not a global switch. On NEU,
+# GC10 and PCB essentially every image is defective, so their alpha floors are
+# already fine (0.0029-0.0097) and shifting 15% of images out of training buys
+# almost no tightness while costing detector accuracy. On KolektorSDD2 and
+# Magnetic-Tile defects are rare, the floor is the binding constraint
+# (0.0185 / 0.0167), and the same shift roughly halves it.
+#
+# Keeping the other three on the original allocation also means their cached
+# models stay valid, so only the datasets that benefit need retraining.
+RARE_DEFECT = {"kolektor", "magnetic_tile"}
+
+
 def write_splits(coco_path, out_dir, fractions=(0.60, 0.15, 0.25),
-                 defect_fractions=(0.45, 0.30, 0.25), seed=42):
+                 defect_fractions=None, seed=42):
     with open(coco_path) as f:
         d = json.load(f)
     name = os.path.basename(coco_path).replace("_coco.json", "")
+    if defect_fractions is None:
+        defect_fractions = (0.45, 0.30, 0.25) if name in RARE_DEFECT else fractions
+    note = "calibration-heavy" if defect_fractions != fractions else "uniform"
+    print(f"  [{name}] defect allocation: {note} {defect_fractions}")
     tr, cal, te = stratified_split(d["images"], d["annotations"], fractions,
                                    defect_fractions, seed)
 

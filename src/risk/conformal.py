@@ -226,6 +226,64 @@ def mondrian_risk_control(
 
 
 # ---------------------------------------------------------------------------
+# 4. Localization-robust CRC (pre-specified multi-IoU certificate)
+# ---------------------------------------------------------------------------
+
+def localization_robust_risk_control(
+    records: Sequence[dict],
+    lambdas: np.ndarray,
+    alpha: float | dict,
+    iou_thresholds: Sequence[float] = (0.30, 0.50, 0.75),
+    B: float = 1.0,
+) -> dict:
+    """One score threshold that controls escape risk at every selected IoU.
+
+    Object-detection papers often select one localisation IoU (usually 0.50).
+    A threshold that is safe at that lenient overlap can be unsafe at stricter
+    localisation.  This procedure makes the IoU set part of the certificate,
+    not a post-hoc sensitivity plot.
+
+    For each pre-specified IoU ``q``, ordinary CRC produces ``lambda_q`` with
+    ``E[L_q(lambda_q)] <= alpha_q``.  Deploying
+
+        lambda_star = min_q lambda_q
+
+    is safe for every q because escape loss is pointwise non-decreasing in the
+    score threshold: ``L_q(lambda_star) <= L_q(lambda_q)``.  Thus each ordinary
+    CRC guarantee transfers directly; no data-driven model selection or extra
+    multiplicity adjustment is being smuggled in.  If any IoU cannot certify,
+    the robust policy refuses and routes every part to review.
+
+    ``alpha`` may be one shared budget or a mapping from IoU to budget.
+    """
+    lambdas = np.asarray(lambdas, dtype=float)
+    ious = tuple(float(q) for q in iou_thresholds)
+    if not ious:
+        raise ValueError("at least one IoU threshold is required")
+    out = {"issued": False, "threshold": None, "per_iou": {}}
+    selected = []
+    for q in ious:
+        alpha_q = float(alpha[q] if isinstance(alpha, dict) else alpha)
+        try:
+            losses, _, _ = build_calibration_losses(records, lambdas, q)
+            lam = conformal_risk_control(losses, lambdas, alpha_q, B=B)
+            j = int(np.flatnonzero(lambdas == lam)[0])
+            out["per_iou"][str(q)] = {"alpha": alpha_q, "threshold": lam,
+                                       "n_cal": int(losses.shape[0]),
+                                       "empirical_risk": float(losses[:, j].mean()),
+                                       "issued": True}
+            selected.append(lam)
+        except (RiskNotAchievable, ValueError) as exc:
+            out["per_iou"][str(q)] = {"alpha": alpha_q, "threshold": None,
+                                       "issued": False, "error": str(exc)}
+    if len(selected) != len(ious):
+        return out
+    out["issued"] = True
+    out["threshold"] = float(min(selected))
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Loss definitions for detection
 # ---------------------------------------------------------------------------
 
