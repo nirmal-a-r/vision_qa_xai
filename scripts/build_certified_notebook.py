@@ -457,7 +457,7 @@ A run that is killed part-way is **refused, not recorded**. An earlier version
 wrote truncated runs into the results file where they were indistinguishable
 from converged ones, and two of them (5/120 and 2/100 epochs) dragged the CCE
 ablation mean down by 18pp before being caught.""")
-co('''TRAIN = False              # <-- True to retrain (hours, needs a free GPU)
+co('''TRAIN = True               # <-- True to retrain (hours, needs a free GPU)
 TRAIN_DATASETS = "neu,magnetic_tile,kolektor"   # the three that carry the argument
 TRAIN_SEEDS = "0,1,2"
 
