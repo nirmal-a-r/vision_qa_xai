@@ -1,0 +1,227 @@
+[
+  {
+    "insertion_auc": 0.8308804585263219,
+    "energy_pointing": 0.649932337617445,
+    "chance_level": 0.163916015625,
+    "pointing_game": true,
+    "faithfulness": 0.7060906490028465,
+    "image_id": "0001758",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.7250089180560241,
+    "energy_pointing": 0.7267321836811897,
+    "chance_level": 0.56568603515625,
+    "pointing_game": true,
+    "faithfulness": 0.547907372082947,
+    "image_id": "0001967",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.8393080200597492,
+    "energy_pointing": 0.3694811211812562,
+    "chance_level": 0.1262890625,
+    "pointing_game": true,
+    "faithfulness": 0.5588259307666779,
+    "image_id": "0000004",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.5874084071326355,
+    "energy_pointing": 0.4763373497502882,
+    "chance_level": 0.17755224609375,
+    "pointing_game": false,
+    "faithfulness": 0.4753480236372255,
+    "image_id": "0001122",
+    "n_gt": 5
+  },
+  {
+    "insertion_auc": 0.5836702530364339,
+    "energy_pointing": 0.004663396438816746,
+    "chance_level": 0.02148046875,
+    "pointing_game": false,
+    "faithfulness": 0.29183512651821697,
+    "image_id": "0001131",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.9317645603660103,
+    "energy_pointing": 0.8798597703089088,
+    "chance_level": 0.189537109375,
+    "pointing_game": true,
+    "faithfulness": 0.8917640009373982,
+    "image_id": "0000180",
+    "n_gt": 2
+  },
+  {
+    "insertion_auc": 0.8818780071049925,
+    "energy_pointing": 0.7656650124786648,
+    "chance_level": 0.22331787109375,
+    "pointing_game": true,
+    "faithfulness": 0.7900825728455521,
+    "image_id": "0000046",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.8565490771151145,
+    "energy_pointing": 0.3339370010620112,
+    "chance_level": 0.02335888671875,
+    "pointing_game": true,
+    "faithfulness": 0.5872777333441267,
+    "image_id": "0002096",
+    "n_gt": 2
+  },
+  {
+    "insertion_auc": 0.9291986645077903,
+    "energy_pointing": 0.8335347264608016,
+    "chance_level": 0.17468310546875,
+    "pointing_game": true,
+    "faithfulness": 0.8637500253741756,
+    "image_id": "0000644",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.8848398299321952,
+    "energy_pointing": 0.13001272492209165,
+    "chance_level": 0.08091796875,
+    "pointing_game": false,
+    "faithfulness": 0.4691284972812802,
+    "image_id": "0001449",
+    "n_gt": 2
+  },
+  {
+    "insertion_auc": 0.8567049272897322,
+    "energy_pointing": 0.08731833811634857,
+    "chance_level": 0.0206630859375,
+    "pointing_game": false,
+    "faithfulness": 0.46238327123607,
+    "image_id": "0000696",
+    "n_gt": 3
+  },
+  {
+    "insertion_auc": 0.9122292762340237,
+    "energy_pointing": 0.488275588078052,
+    "chance_level": 0.1806328125,
+    "pointing_game": true,
+    "faithfulness": 0.6438465733661592,
+    "image_id": "0000128",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.8263412729799531,
+    "energy_pointing": 0.3367158495484644,
+    "chance_level": 0.0531875,
+    "pointing_game": false,
+    "faithfulness": 0.5628984598702469,
+    "image_id": "0001266",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.9108734830747437,
+    "energy_pointing": 0.3501772121248083,
+    "chance_level": 0.07554443359375,
+    "pointing_game": true,
+    "faithfulness": 0.6039743178746922,
+    "image_id": "0001224",
+    "n_gt": 7
+  },
+  {
+    "insertion_auc": 0.89572595871563,
+    "energy_pointing": 0.3642883809497137,
+    "chance_level": 0.1919921875,
+    "pointing_game": false,
+    "faithfulness": 0.554480880066364,
+    "image_id": "0000403",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.7350198848565729,
+    "energy_pointing": 0.8477746811695668,
+    "chance_level": 0.7437939453125,
+    "pointing_game": true,
+    "faithfulness": 0.5704339833606803,
+    "image_id": "0001495",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.9123586588081498,
+    "energy_pointing": 0.894040835297005,
+    "chance_level": 0.18862109375,
+    "pointing_game": true,
+    "faithfulness": 0.8908835940289017,
+    "image_id": "0002187",
+    "n_gt": 2
+  },
+  {
+    "insertion_auc": 0.7852975575776365,
+    "energy_pointing": 0.23223457448352808,
+    "chance_level": 0.107056640625,
+    "pointing_game": false,
+    "faithfulness": 0.46274165340638873,
+    "image_id": "0001408",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.8813201574142215,
+    "energy_pointing": 0.13844135913268787,
+    "chance_level": 0.0646201171875,
+    "pointing_game": false,
+    "faithfulness": 0.48012064617367967,
+    "image_id": "0000611",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.7978609503948927,
+    "energy_pointing": 0.048823857246003396,
+    "chance_level": 0.09692333984375,
+    "pointing_game": false,
+    "faithfulness": 0.39893047519744634,
+    "image_id": "0000920",
+    "n_gt": 3
+  },
+  {
+    "insertion_auc": 0.9271401164203423,
+    "energy_pointing": 0.1560130149442979,
+    "chance_level": 0.08478564453125,
+    "pointing_game": false,
+    "faithfulness": 0.5024830024769638,
+    "image_id": "0001602",
+    "n_gt": 2
+  },
+  {
+    "insertion_auc": 0.4175434293765096,
+    "energy_pointing": 0.08944566579174253,
+    "chance_level": 0.1051025390625,
+    "pointing_game": false,
+    "faithfulness": 0.2087717146882548,
+    "image_id": "0001429",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.7594570118725494,
+    "energy_pointing": 0.8180635319753348,
+    "chance_level": 0.66416748046875,
+    "pointing_game": true,
+    "faithfulness": 0.6088546961595899,
+    "image_id": "0001807",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.7746280660847623,
+    "energy_pointing": 0.34021723005320054,
+    "chance_level": 0.13212890625,
+    "pointing_game": false,
+    "faithfulness": 0.5071983829773858,
+    "image_id": "0001381",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.779184266795175,
+    "energy_pointing": 0.8760647298810558,
+    "chance_level": 0.4615078125,
+    "pointing_game": true,
+    "faithfulness": 0.7745159326691005,
+    "image_id": "0001800",
+    "n_gt": 1
+  }
+]

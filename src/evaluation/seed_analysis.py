@@ -130,11 +130,18 @@ if __name__ == "__main__":
     rows = load_runs()
     print(f"{len(rows)} valid runs\n")
 
-    print("PER-CONFIGURATION (mean +/- std across seeds)")
-    for r in summarise(rows, a.metric):
-        sd = f"+/- {r['std']:.4f}" if r["std"] is not None else "  (1 seed) "
-        print(f"  {r['model']:12s} {r['dataset']:14s} {r['encoding']:9s} "
-              f"{r['mean']:.4f} {sd}  n={r['n_seeds']}")
+    for metric in (a.metric, "test_mAP50_95") if a.metric == "test_mAP50" else (a.metric,):
+        print(f"PER-CONFIGURATION {metric} (mean +/- std across seeds)")
+        for r in summarise(rows, metric):
+            sd = f"+/- {r['std']:.4f}" if r["std"] is not None else "  (1 seed) "
+            print(f"  {r['model']:12s} {r['dataset']:14s} {r['encoding']:22s} "
+                  f"{r['mean']:.4f} {sd}  n={r['n_seeds']}")
+        print()
+    summ = {m: summarise(rows, m) for m in ("test_mAP50", "test_mAP50_95")}
+    os.makedirs("runs", exist_ok=True)
+    with open("runs/seed_summary.json", "w") as f:
+        json.dump(summ, f, indent=1)
+    print("wrote runs/seed_summary.json")
 
     print("\nPAIRED CCE ABLATION (per seed, baseline -> cce)")
     pairs = paired_ablation(rows, a.metric)

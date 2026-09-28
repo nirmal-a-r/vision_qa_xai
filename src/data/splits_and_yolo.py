@@ -1,7 +1,7 @@
 """
 splits_and_yolo.py
 ==================
-Four-way splits + YOLO export.
+Four-way splits (train / val / cal / test) + YOLO export.
 
 Split policy is train / cal / test, where **cal** is a dedicated conformal
 calibration set. This is not a stylistic choice: the CRC and LTT guarantees
@@ -86,35 +86,74 @@ def stratified_split(images, annotations, fractions=(0.60, 0.15, 0.25),
     return set(train), set(cal), set(test)
 
 
-# Which datasets actually need the calibration-heavy allocation.
+# Which datasets get the calibration-heavy allocation (configs/config.yaml,
+# splits.defect_aware):
 #
-# The allocation is a per-dataset design choice, not a global switch. On NEU,
-# GC10 and PCB essentially every image is defective, so their alpha floors are
-# already fine (0.0029-0.0097) and shifting 15% of images out of training buys
-# almost no tightness while costing detector accuracy. On KolektorSDD2 and
-# Magnetic-Tile defects are rare, the floor is the binding constraint
-# (0.0185 / 0.0167), and the same shift roughly halves it.
-#
-# Keeping the other three on the original allocation also means their cached
-# models stay valid, so only the datasets that benefit need retraining.
-RARE_DEFECT = {"kolektor", "magnetic_tile"}
+#   all        every dataset (the project document, Section 9.1: "apply the
+#              defect-aware allocation ... which roughly halves every alpha
+#              floor"). Default. On NEU / GC10 / PCB, where nearly every image is
+#              defective, it moves 15% of images from training to calibration.
+#   rare_only  only the rare-defect datasets, where the floor binds hardest.
+#   none       the uniform 60/15/25 split everywhere.
+RARE_DEFECT = {"kolektor", "magnetic_tile", "dagm"}
+
+
+def split_settings(config_path=None):
+    """(clean_fractions, defect_fractions, mode, seed, inner_val) from the config."""
+    cfg = {}
+    path = config_path or os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__)))), "configs", "config.yaml")
+    if os.path.exists(path):
+        with open(path) as f:
+            cfg = (yaml.safe_load(f) or {}).get("splits", {}) or {}
+    return (tuple(cfg.get("clean_fractions", (0.60, 0.15, 0.25))),
+            tuple(cfg.get("defect_fractions", (0.45, 0.30, 0.25))),
+            cfg.get("defect_aware", "all"), int(cfg.get("seed", 42)),
+            float(cfg.get("inner_val_fraction", 0.15)))
+
+
+def defect_fractions_for(name, clean_fractions, defect_fractions, mode):
+    if mode == "all" or (mode == "rare_only" and name in RARE_DEFECT):
+        return tuple(defect_fractions)
+    return tuple(clean_fractions)
+
+
+def inner_val_split(images, train_ids, val_fraction=0.15, seed=42):
+    """Split train ids into (fit, val), defective and clean images separately."""
+    rng = random.Random(seed + 1)
+    by_id = {im["id"]: im for im in images}
+    fit, val = set(), set()
+    for defective in (True, False):
+        group = sorted(i for i in train_ids if (by_id[i].get("n_boxes", 1) > 0) == defective)
+        rng.shuffle(group)
+        k = int(round(val_fraction * len(group)))
+        if defective and group and k == 0:
+            k = 1
+        val.update(group[:k])
+        fit.update(group[k:])
+    return fit, val
 
 
 def write_splits(coco_path, out_dir, fractions=(0.60, 0.15, 0.25),
-                 defect_fractions=None, seed=42):
+                 defect_fractions=None, seed=42, val_fraction=0.15, mode="all"):
     with open(coco_path) as f:
         d = json.load(f)
     name = os.path.basename(coco_path).replace("_coco.json", "")
     if defect_fractions is None:
-        defect_fractions = (0.45, 0.30, 0.25) if name in RARE_DEFECT else fractions
+        defect_fractions = defect_fractions_for(name, fractions, (0.45, 0.30, 0.25), mode)
     note = "calibration-heavy" if defect_fractions != fractions else "uniform"
     print(f"  [{name}] defect allocation: {note} {defect_fractions}")
     tr, cal, te = stratified_split(d["images"], d["annotations"], fractions,
                                    defect_fractions, seed)
+    # Inner validation slice for the DETECTOR's own early stopping and checkpoint
+    # selection, carved from train. Ultralytics picks best.pt on its 'val' split;
+    # if that were the calibration block, the score function would depend on the
+    # calibration data and the conformal guarantee would no longer hold.
+    tr, va = inner_val_split(d["images"], tr, val_fraction, seed)
 
     os.makedirs(out_dir, exist_ok=True)
     paths = {}
-    for split, ids in (("train", tr), ("cal", cal), ("test", te)):
+    for split, ids in (("train", tr), ("val", va), ("cal", cal), ("test", te)):
         imgs = [im for im in d["images"] if im["id"] in ids]
         anns = [a for a in d["annotations"] if a["image_id"] in ids]
         p = os.path.join(out_dir, f"{name}_{split}.json")
@@ -188,7 +227,7 @@ def coco_to_yolo(split_jsons, categories, out_root, dataset_name, link=True):
         yaml.safe_dump({
             "path": os.path.abspath(root),
             "train": "images/train",
-            "val": "images/cal",     # ultralytics 'val' = our calibration block
+            "val": "images/val",     # inner slice of train; NEVER the calibration block
             "test": "images/test",
             "names": {i: n for i, n in enumerate(names)},
         }, f, sort_keys=False)
@@ -203,14 +242,23 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--processed_dir", default="data/processed")
     ap.add_argument("--yolo_dir", default="data/yolo")
-    ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--seed", type=int, default=None, help="default: config splits.seed")
+    ap.add_argument("--only", default=None, help="comma list of datasets")
     a = ap.parse_args()
+    clean_f, defect_f, mode, cfg_seed, inner_val = split_settings()
+    seed = cfg_seed if a.seed is None else a.seed
+    only = set(a.only.split(",")) if a.only else None
+    print(f"splits: clean {clean_f}, defective {defect_f} (defect-aware: {mode}), seed {seed}")
 
     out = {}
     for cp in sorted(glob.glob(os.path.join(a.processed_dir, "*_coco.json"))):
         name = os.path.basename(cp).replace("_coco.json", "")
+        if only and name not in only:
+            continue
         print(f"[{name}]")
-        paths, cats = write_splits(cp, os.path.join(a.processed_dir, "splits"), seed=a.seed)
+        paths, cats = write_splits(cp, os.path.join(a.processed_dir, "splits"), clean_f,
+                                   defect_fractions_for(name, clean_f, defect_f, mode),
+                                   seed=seed, val_fraction=inner_val)
         out[name] = coco_to_yolo(paths, cats, a.yolo_dir, name)
     print("\ndata.yaml files:")
     for k, v in out.items():

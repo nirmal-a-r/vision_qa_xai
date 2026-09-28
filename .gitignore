@@ -2,6 +2,7 @@
 vqaenv/
 *.venv/
 __pycache__/
+.pytest_cache/
 *.pyc
 
 # data and run artifacts (large, regenerable)
@@ -20,8 +21,14 @@ __pycache__/
 *.pth
 *.zip
 
-# notebook checkpoints
+# notebook checkpoints and executed copies (outputs are regenerated)
 .ipynb_checkpoints/
+notebook/*_executed.ipynb
+
+# first-study artefacts kept locally for reference only
+archive/v1_results/preds/
+archive/v1_runs_old_splits/
+_old_splits_DELETE_ME/
 
 # downloaded pretrained weights
 weights_cache/
@@ -29,3 +36,8 @@ weights_cache/
 # figures ARE tracked: they are the paper deliverable and only ~10 MB.
 # Regenerable from the notebook, but a repo a reviewer clones should render
 # its own README diagrams without a GPU run first.
+
+# smoke-test workspace, external generator repos and their exported inputs
+/runs_smoke/
+/external/
+/runs_smoke_log.txt

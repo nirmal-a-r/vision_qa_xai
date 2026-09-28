@@ -1,0 +1,227 @@
+[
+  {
+    "insertion_auc": 0.9134924085576919,
+    "energy_pointing": 0.7439866940618381,
+    "chance_level": 0.144,
+    "pointing_game": true,
+    "faithfulness": 0.8072057218383308,
+    "image_id": "0001394",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.5,
+    "energy_pointing": 0.6275274791424059,
+    "chance_level": 0.190575,
+    "pointing_game": true,
+    "faithfulness": 0.5199153591391457,
+    "image_id": "0001590",
+    "n_gt": 2
+  },
+  {
+    "insertion_auc": 0.6481547229347212,
+    "energy_pointing": 0.3585371885533546,
+    "chance_level": 0.4292,
+    "pointing_game": true,
+    "faithfulness": 0.3240773614673606,
+    "image_id": "0000012",
+    "n_gt": 3
+  },
+  {
+    "insertion_auc": 0.41621055260617856,
+    "energy_pointing": 0.4413397309541533,
+    "chance_level": 0.26085,
+    "pointing_game": true,
+    "faithfulness": 0.33019803890483,
+    "image_id": "0000870",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.6532083124984306,
+    "energy_pointing": 0.9191331537528054,
+    "chance_level": 0.8539,
+    "pointing_game": true,
+    "faithfulness": 0.5498524579357498,
+    "image_id": "0000875",
+    "n_gt": 2
+  },
+  {
+    "insertion_auc": 0.5676300308369788,
+    "energy_pointing": 0.8354051771762248,
+    "chance_level": 0.453725,
+    "pointing_game": false,
+    "faithfulness": 0.6331630335194685,
+    "image_id": "0000111",
+    "n_gt": 2
+  },
+  {
+    "insertion_auc": 0.684238224017774,
+    "energy_pointing": 0.5073248752643219,
+    "chance_level": 0.483,
+    "pointing_game": false,
+    "faithfulness": 0.3656441364424672,
+    "image_id": "0000019",
+    "n_gt": 3
+  },
+  {
+    "insertion_auc": 0.8441361098979957,
+    "energy_pointing": 0.8916736952928491,
+    "chance_level": 0.78555,
+    "pointing_game": true,
+    "faithfulness": 0.6695003125681378,
+    "image_id": "0001656",
+    "n_gt": 3
+  },
+  {
+    "insertion_auc": 0.7943499295755504,
+    "energy_pointing": 0.9663154614695255,
+    "chance_level": 0.349675,
+    "pointing_game": true,
+    "faithfulness": 0.8712767304199787,
+    "image_id": "0000478",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.904058169358855,
+    "energy_pointing": 0.8311314941510494,
+    "chance_level": 0.300275,
+    "pointing_game": true,
+    "faithfulness": 0.8313613181647606,
+    "image_id": "0001143",
+    "n_gt": 3
+  },
+  {
+    "insertion_auc": 0.7843230341593104,
+    "energy_pointing": 0.5934171162424283,
+    "chance_level": 0.058125,
+    "pointing_game": true,
+    "faithfulness": 0.6763245515812761,
+    "image_id": "0000513",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.48655629054120103,
+    "energy_pointing": 0.27731621939326073,
+    "chance_level": 0.165675,
+    "pointing_game": false,
+    "faithfulness": 0.31018325982024286,
+    "image_id": "0000054",
+    "n_gt": 2
+  },
+  {
+    "insertion_auc": 0.8500976276407054,
+    "energy_pointing": 0.6171181698791438,
+    "chance_level": 0.159,
+    "pointing_game": true,
+    "faithfulness": 0.6974139564357771,
+    "image_id": "0001004",
+    "n_gt": 2
+  },
+  {
+    "insertion_auc": 0.7560958002181982,
+    "energy_pointing": 0.21100501168509,
+    "chance_level": 0.29985,
+    "pointing_game": false,
+    "faithfulness": 0.3780479001090991,
+    "image_id": "0000968",
+    "n_gt": 2
+  },
+  {
+    "insertion_auc": 0.8622016990553756,
+    "energy_pointing": 0.45616060857103885,
+    "chance_level": 0.123675,
+    "pointing_game": true,
+    "faithfulness": 0.6208053590253279,
+    "image_id": "0000317",
+    "n_gt": 3
+  },
+  {
+    "insertion_auc": 0.8893217096228471,
+    "energy_pointing": 0.6918668646879547,
+    "chance_level": 0.14355,
+    "pointing_game": true,
+    "faithfulness": 0.7647711150063881,
+    "image_id": "0001203",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.7948914693708083,
+    "energy_pointing": 0.35571044302895766,
+    "chance_level": 0.35455,
+    "pointing_game": true,
+    "faithfulness": 0.39834467575671695,
+    "image_id": "0001690",
+    "n_gt": 3
+  },
+  {
+    "insertion_auc": 0.8510587750817411,
+    "energy_pointing": 0.15301875270984056,
+    "chance_level": 0.0931,
+    "pointing_game": true,
+    "faithfulness": 0.458564315708166,
+    "image_id": "0001098",
+    "n_gt": 2
+  },
+  {
+    "insertion_auc": 0.8133483719128921,
+    "energy_pointing": 0.49196730597939825,
+    "chance_level": 0.233725,
+    "pointing_game": true,
+    "faithfulness": 0.5751791652258977,
+    "image_id": "0000465",
+    "n_gt": 5
+  },
+  {
+    "insertion_auc": 0.6699884044231705,
+    "energy_pointing": 0.1799689521856319,
+    "chance_level": 0.198325,
+    "pointing_game": false,
+    "faithfulness": 0.33499420221158527,
+    "image_id": "0000694",
+    "n_gt": 2
+  },
+  {
+    "insertion_auc": 0.8038273188751148,
+    "energy_pointing": 0.35043514902899026,
+    "chance_level": 0.215875,
+    "pointing_game": false,
+    "faithfulness": 0.48771640072816175,
+    "image_id": "0001283",
+    "n_gt": 3
+  },
+  {
+    "insertion_auc": 0.6139191940127543,
+    "energy_pointing": 0.3655669464052862,
+    "chance_level": 0.1008,
+    "pointing_game": true,
+    "faithfulness": 0.4541832104434802,
+    "image_id": "0001120",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.9148288440297877,
+    "energy_pointing": 0.4718847029008034,
+    "chance_level": 0.0772,
+    "pointing_game": true,
+    "faithfulness": 0.6712661249303704,
+    "image_id": "0001438",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.9196859397554751,
+    "energy_pointing": 0.7968909390776062,
+    "chance_level": 0.3773,
+    "pointing_game": true,
+    "faithfulness": 0.7967555594695203,
+    "image_id": "0001081",
+    "n_gt": 2
+  },
+  {
+    "insertion_auc": 0.8956458380275831,
+    "energy_pointing": 0.8951318816479982,
+    "chance_level": 0.70825,
+    "pointing_game": true,
+    "faithfulness": 0.768100351144037,
+    "image_id": "0001459",
+    "n_gt": 3
+  }
+]

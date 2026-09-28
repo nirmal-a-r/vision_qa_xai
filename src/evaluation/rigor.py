@@ -19,7 +19,13 @@ from typing import Iterable
 
 import numpy as np
 
-from ..risk.spi import NEG_INF, crc_threshold, empirical_risk, escape_confidences
+from src.risk.escape import NEG_INF, crc_escape_threshold as crc_threshold, empirical_escape as empirical_risk
+from src.risk.escape import escape_scores
+
+
+def escape_confidences(records, iou_thresh=0.5):
+    """Localised escape scores of the defective images (see src/risk/escape.py)."""
+    return escape_scores(records, "localized", iou_thresh)
 
 
 def max_detection_score(record: dict) -> float:

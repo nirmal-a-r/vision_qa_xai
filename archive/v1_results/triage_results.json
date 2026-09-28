@@ -1,0 +1,55 @@
+{
+ "neu_yolov8s": {
+  "skipped": "dataset has no negatives; triage is not evaluable"
+ },
+ "gc10_yolov8s": {
+  "skipped": "dataset has no negatives; triage is not evaluable"
+ },
+ "pcb_yolov8s": {
+  "skipped": "dataset has no negatives; triage is not evaluable"
+ },
+ "magnetic_tile_yolov8s": {
+  "n": 336,
+  "counts": {
+   "AUTO_ACCEPT": 212,
+   "HUMAN_REVIEW": 29,
+   "AUTO_REJECT": 95
+  },
+  "escape_rate": 0.0,
+  "escape_rate_per_image": 0.0,
+  "review_load": 0.08630952380952381,
+  "false_scrap_rate": 0.016736401673640166,
+  "auto_decision_rate": 0.9136904761904762,
+  "alpha": 0.05,
+  "delta": 0.1,
+  "n_certified": 42,
+  "n_configs": 543,
+  "config": {
+   "lambda_lo": 0.02,
+   "lambda_hi": 0.3,
+   "phi": 0.0
+  }
+ },
+ "kolektor_yolov8s": {
+  "n": 834,
+  "counts": {
+   "AUTO_ACCEPT": 741,
+   "HUMAN_REVIEW": 32,
+   "AUTO_REJECT": 61
+  },
+  "escape_rate": 0.07865168539325842,
+  "escape_rate_per_image": 0.008393285371702638,
+  "review_load": 0.03836930455635491,
+  "false_scrap_rate": 0.0,
+  "auto_decision_rate": 0.9616306954436451,
+  "alpha": 0.05,
+  "delta": 0.1,
+  "n_certified": 84,
+  "n_configs": 543,
+  "config": {
+   "lambda_lo": 0.06142857142857143,
+   "lambda_hi": 0.3,
+   "phi": 0.0
+  }
+ }
+}

@@ -1,0 +1,15 @@
+[
+  {
+    "dataset": "neu",
+    "model": "rtdetr-l.pt",
+    "seed": 0,
+    "imgsz": 256,
+    "epochs": 100,
+    "train_seconds": 7585.5,
+    "test_mAP50": 0.7051858592105008,
+    "test_mAP50_95": 0.3732581593088252,
+    "test_precision": 0.6649488960349387,
+    "test_recall": 0.7051985188717075,
+    "weights": "C:\\Users\\nirma\\Desktop\\vision_qa_xai\\runs\\detect\\runs\\detect\\neu_rtdetr-l_s0\\weights\\best.pt"
+  }
+]

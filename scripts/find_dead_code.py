@@ -4,17 +4,14 @@ Grepping for a module name gives false positives (searching for `train` matches
 `train_baselines`, `training`, `.train(`), so this walks the real import graph
 from the notebook and the runnable scripts instead.
 """
-import ast, io, json, os, re
+import ast, glob, io, json, os, re
 
-ENTRIES = [
-    "notebook/VisionQA_RiskControlled_Inspection.ipynb",
-    "scripts/run_all_experiments.py",
-    "scripts/run_pipeline.py",
-    "scripts/compute_faithfulness.py",
-    "src/paper/build_notebook.py",
-    "tests/test_conformal.py",
-    "tests/test_adaptive.py",
-]
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(ROOT)
+
+# Every runnable entry point: scripts, tests and the deliverable notebook.
+ENTRIES = sorted(glob.glob("scripts/*.py") + glob.glob("tests/*.py")
+                 + glob.glob("notebook/*.ipynb"))
 
 
 def imported_src_modules(path):
@@ -49,6 +46,9 @@ def imported_src_modules(path):
         out.add(m)
     for m in re.findall(r'python -m (src\.[\w.]+)', src):
         out.add(m)
+    # The notebook builder embeds modules by FILE PATH ("src/risk/sperc.py").
+    for p in re.findall(r'"(src/[\w/]+)\.py"', src):
+        out.add(p.replace("/", "."))
     return out
 
 

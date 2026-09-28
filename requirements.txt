@@ -1,8 +1,38 @@
-# Kaggle notebooks ship with torch/torchvision/opencv/sklearn/matplotlib already.
-# This file only lists what typically needs an explicit install on Kaggle.
-transformers>=4.40
-timm>=0.9
-albumentations>=1.4
-pycocotools>=2.0.7
-captum>=0.7
+# ---------------------------------------------------------------------------
+# Install PyTorch FIRST, from the official CUDA 12.8 (or newer) index - needed for
+# RTX 50xx / Blackwell GPUs such as the RTX 5060 (sm_120). Check the selector at
+# https://pytorch.org/get-started/locally/ for the current command:
+#
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+#
+# Then:  pip install -r requirements.txt
+# Tested with: Python 3.10.11, torch 2.12 (cu128), ultralytics 8.4.126.
+# ---------------------------------------------------------------------------
+
+# detectors (RT-DETR-L and YOLOv8s)
+ultralytics>=8.3
+
+# numerics, data, plots
+numpy>=1.24
+scipy>=1.10
+pandas>=2.0
+matplotlib>=3.7
+opencv-python>=4.8
 pyyaml>=6.0
+pycocotools>=2.0
+
+# synthetic-defect generators (training-free SD inpainting arm; section 10.2 extras)
+diffusers>=0.30
+transformers>=4.40
+accelerate>=0.30
+
+# notebook
+ipykernel>=6.0
+nbformat>=5.9
+nbclient>=0.9
+
+# tests
+pytest>=7.0
+
+# AnomalyDiffusion (AAAI 2024) and the official TF-IDG (ICCV 2025) live in their own
+# repositories with their own environments; see README, "Generating synthetic defects".

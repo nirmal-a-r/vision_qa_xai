@@ -265,3 +265,47 @@ def cce_diagram():
                 style="italic")
     fig.tight_layout()
     return fig
+
+
+def sperc_architecture_diagram():
+    """The five-stage system of the project document (Section 7).
+
+    Data flows left to right; the generator and the detector draw only on the
+    training split, and calibration scores feed SPERC alone. The m real
+    calibration defects never touch the detector's training.
+    """
+    fig, ax = plt.subplots(figsize=(11.5, 3.3))
+    ax.set_xlim(0, 11.5)
+    ax.set_ylim(0, 3.3)
+    ax.axis("off")
+    W, H = 1.55, 0.72
+    boxes = {
+        "raw": (0.15, 1.30, "Raw line\nimages", "#555555"),
+        "split": (1.95, 1.30, "Splits\ntrain / cal / test", "#555555"),
+        "det": (3.75, 2.25, "Detector training\nRT-DETR-L, YOLOv8s", OKABE[0]),
+        "gen": (3.75, 0.35, "Generator\n3-5 train defects", OKABE[2]),
+        "syn": (5.55, 0.35, "Synthetic defects\non clean parts", OKABE[2]),
+        "esc": (5.55, 2.25, "Escape scores\nreal m, synthetic N", OKABE[0]),
+        "sperc": (7.35, 1.30, "SPERC\ntransporter + beta", OKABE[1]),
+        "cert": (9.15, 2.10, "Certificate\nTier H, Tier N, refuse", OKABE[1]),
+        "route": (9.15, 0.50, "Routing +\ndrift monitor", OKABE[3]),
+    }
+    for x, y, t, c in boxes.values():
+        _box(ax, (x, y), W, H, t, c, fontsize=8.2)
+
+    def c(k, side):
+        x, y, _, _ = boxes[k]
+        return {"r": (x + W, y + H / 2), "l": (x, y + H / 2), "t": (x + W / 2, y + H),
+                "b": (x + W / 2, y)}[side]
+    for k1, s1, k2, s2 in (("raw", "r", "split", "l"), ("split", "r", "det", "l"),
+                           ("split", "r", "gen", "l"), ("gen", "r", "syn", "l"),
+                           ("det", "r", "esc", "l"), ("syn", "t", "esc", "b"),
+                           ("esc", "r", "sperc", "l"), ("sperc", "r", "cert", "l"),
+                           ("cert", "b", "route", "t")):
+        _arrow(ax, c(k1, s1), c(k2, s2))
+    ax.text(2.72, 0.95, "cal split: m real defects\n(never used for training)", ha="center",
+            va="top", fontsize=7.2, color="0.3")
+    ax.set_title("SPERC system: the generator and the detector see only the training split",
+                 fontsize=10, loc="left")
+    fig.tight_layout()
+    return fig

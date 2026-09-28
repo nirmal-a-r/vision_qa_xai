@@ -1,0 +1,227 @@
+[
+  {
+    "insertion_auc": 0.9308105654712642,
+    "energy_pointing": 0.6281269309203616,
+    "chance_level": 0.10564289402719605,
+    "pointing_game": false,
+    "faithfulness": 0.7575056268844342,
+    "image_id": "0000264",
+    "n_gt": 2
+  },
+  {
+    "insertion_auc": 0.7807452783381418,
+    "energy_pointing": 0.16367687340970594,
+    "chance_level": 0.08302391310371582,
+    "pointing_game": false,
+    "faithfulness": 0.4343503183356992,
+    "image_id": "0001263",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.9230479514152786,
+    "energy_pointing": 0.10249598000560964,
+    "chance_level": 0.0016323934704261182,
+    "pointing_game": false,
+    "faithfulness": 0.5120382281110178,
+    "image_id": "0000004",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.8604200969099212,
+    "energy_pointing": 0.0873771279904091,
+    "chance_level": 0.0035907497714111553,
+    "pointing_game": false,
+    "faithfulness": 0.4722542076193683,
+    "image_id": "0000149",
+    "n_gt": 2
+  },
+  {
+    "insertion_auc": 0.9306632595166903,
+    "energy_pointing": 0.42793310050596395,
+    "chance_level": 0.05570330969267139,
+    "pointing_game": true,
+    "faithfulness": 0.6624252946170812,
+    "image_id": "0000170",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.867196621034147,
+    "energy_pointing": 0.1750785049504542,
+    "chance_level": 0.007814438104688662,
+    "pointing_game": false,
+    "faithfulness": 0.5178890285387363,
+    "image_id": "0000018",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.9192856162957894,
+    "energy_pointing": 0.25154286632233197,
+    "chance_level": 0.009083044982698962,
+    "pointing_game": false,
+    "faithfulness": 0.5819839489024192,
+    "image_id": "0000005",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.8313165504948927,
+    "energy_pointing": 0.9305376253988686,
+    "chance_level": 0.4339622641509434,
+    "pointing_game": true,
+    "faithfulness": 0.8542998443497803,
+    "image_id": "0001299",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.9343213884674827,
+    "energy_pointing": 0.08908397568991588,
+    "chance_level": 0.0027465667915106116,
+    "pointing_game": false,
+    "faithfulness": 0.5104482909585928,
+    "image_id": "0000103",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.9176227026245026,
+    "energy_pointing": 0.12222864983303564,
+    "chance_level": 0.00946730935607465,
+    "pointing_game": true,
+    "faithfulness": 0.5157308964933686,
+    "image_id": "0000216",
+    "n_gt": 2
+  },
+  {
+    "insertion_auc": 0.9336238369044372,
+    "energy_pointing": 0.06322760375017222,
+    "chance_level": 0.001389341148377293,
+    "pointing_game": true,
+    "faithfulness": 0.4977740667397741,
+    "image_id": "0000098",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.929451236436139,
+    "energy_pointing": 0.08181528301444645,
+    "chance_level": 0.004668904485810192,
+    "pointing_game": false,
+    "faithfulness": 0.5034797468072011,
+    "image_id": "0000014",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.9360288137598975,
+    "energy_pointing": 0.7883966771380713,
+    "chance_level": 0.04026459591601956,
+    "pointing_game": true,
+    "faithfulness": 0.8577739583347096,
+    "image_id": "0000205",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.9296538902568046,
+    "energy_pointing": 0.25553405876235835,
+    "chance_level": 0.011797511797511798,
+    "pointing_game": false,
+    "faithfulness": 0.5881501252836133,
+    "image_id": "0000196",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.932989989099122,
+    "energy_pointing": 0.04979756786580632,
+    "chance_level": 0.0009032063826584374,
+    "pointing_game": false,
+    "faithfulness": 0.49096427610241256,
+    "image_id": "0000065",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.7998286495916287,
+    "energy_pointing": 0.6401030596703873,
+    "chance_level": 0.38114754098360654,
+    "pointing_game": true,
+    "faithfulness": 0.6091366643970544,
+    "image_id": "0001331",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.8491493852719956,
+    "energy_pointing": 0.9442192290175315,
+    "chance_level": 0.2629757785467128,
+    "pointing_game": true,
+    "faithfulness": 0.886732808096248,
+    "image_id": "0001293",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.9095006637759666,
+    "energy_pointing": 0.453247257361836,
+    "chance_level": 0.031026108075288404,
+    "pointing_game": true,
+    "faithfulness": 0.67262057215208,
+    "image_id": "0000187",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.931710942173031,
+    "energy_pointing": 0.09692456244497878,
+    "chance_level": 0.0025507167514071455,
+    "pointing_game": false,
+    "faithfulness": 0.5131630621984191,
+    "image_id": "0000084",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.7280280291864868,
+    "energy_pointing": 0.9133153335737683,
+    "chance_level": 0.2696245733788396,
+    "pointing_game": true,
+    "faithfulness": 0.8046714742593979,
+    "image_id": "0001344",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.9197554961942704,
+    "energy_pointing": 0.8579520289026491,
+    "chance_level": 0.0361328125,
+    "pointing_game": true,
+    "faithfulness": 0.8861912625836158,
+    "image_id": "0000251",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.9370598436167846,
+    "energy_pointing": 0.8716304931832574,
+    "chance_level": 0.042391304347826085,
+    "pointing_game": true,
+    "faithfulness": 0.9015038456044178,
+    "image_id": "0000222",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.9356987720769796,
+    "energy_pointing": 0.06900197462780076,
+    "chance_level": 0.0017945593326179348,
+    "pointing_game": false,
+    "faithfulness": 0.5015135059466368,
+    "image_id": "0000243",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.8886781095721976,
+    "energy_pointing": 0.0551307747017361,
+    "chance_level": 0.0054005400540054005,
+    "pointing_game": false,
+    "faithfulness": 0.4693391863216775,
+    "image_id": "0000208",
+    "n_gt": 1
+  },
+  {
+    "insertion_auc": 0.8896747832463997,
+    "energy_pointing": 0.7870593861187206,
+    "chance_level": 0.3241590214067278,
+    "pointing_game": true,
+    "faithfulness": 0.7872998786386334,
+    "image_id": "0001326",
+    "n_gt": 1
+  }
+]

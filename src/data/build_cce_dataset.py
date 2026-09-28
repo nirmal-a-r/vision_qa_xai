@@ -43,7 +43,7 @@ from src.data.photometric import complementary_channels
 
 def encode_tree(src_root: str, dst_root: str, clip_limit=2.0, tile_grid=8,
                 sigma_frac=0.02, force=False):
-    splits = [d for d in ("train", "cal", "test")
+    splits = [d for d in ("train", "val", "cal", "test")
               if os.path.isdir(os.path.join(src_root, "images", d))]
     n_done = n_skip = n_fail = 0
 

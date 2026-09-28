@@ -1,5 +1,12 @@
 # Validated: the reduction, and how much headroom CRC leaves on the table
 
+> **Update 2026-09-23.** The blocker in Section 3 is resolved: SPI's exact window
+> construction (the negative-hypergeometric rank law and R_r^-/R_r^+) is implemented in
+> `src/risk/sperc.py` and tested in `tests/test_sperc.py`. The old `src/risk/spi.py` was
+> removed. Its heuristic ("Attempt B") is kept only as a baseline in `src/risk/baselines.py`.
+> The numbers in Sections 1-2 came from a CRC routine that was conservative by one order
+> statistic; the exact version is `src/risk/escape.py::crc_escape_threshold`.
+
 Two results here. The first is solid and reusable. The second quantifies the
 opportunity that motivates the whole cold-start direction. The third section
 records what I could NOT get working, so nobody repeats it.

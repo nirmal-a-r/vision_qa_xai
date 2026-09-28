@@ -1,8 +1,9 @@
 """Compute audited faithfulness on a real sample and save it for the notebook."""
 import os, sys, json, glob
 os.environ.setdefault("TQDM_DISABLE", "1")
-sys.path.insert(0, r"C:/Users/nirma/Desktop/vision_qa_xai")
-os.chdir(r"C:/Users/nirma/Desktop/vision_qa_xai")
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+os.chdir(ROOT)
 
 import numpy as np, cv2
 from ultralytics import YOLO

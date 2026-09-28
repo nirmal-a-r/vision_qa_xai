@@ -1,0 +1,417 @@
+{
+ "neu_yolov8s": {
+  "single_split": [
+   {
+    "alpha": 0.01,
+    "lambda": null,
+    "error": "no lambda achieves alpha=0.01: min certified risk is 0.0450 "
+   },
+   {
+    "alpha": 0.05,
+    "lambda": 0.010000000000000009,
+    "error": null,
+    "escape_cal": 0.041512345679012345,
+    "escape_test": 0.04172222222222223,
+    "covered": true
+   },
+   {
+    "alpha": 0.1,
+    "lambda": 0.03500000000000003,
+    "error": null,
+    "escape_cal": 0.09256172839506174,
+    "escape_test": 0.09248412698412699,
+    "covered": true
+   },
+   {
+    "alpha": 0.2,
+    "lambda": 0.12,
+    "error": null,
+    "escape_cal": 0.19290123456790123,
+    "escape_test": 0.20517460317460315,
+    "covered": false
+   }
+  ],
+  "repeated": {
+   "0.01": {
+    "mean_escape_test": 0.0,
+    "std": 0.0,
+    "frac_trials_covered": 1.0,
+    "n_trials": 60,
+    "n_refused": 60,
+    "refusal_rate": 1.0,
+    "n_issued": 0
+   },
+   "0.05": {
+    "mean_escape_test": 0.04634228301249579,
+    "std": 0.008648144584832916,
+    "frac_trials_covered": 0.8085106382978723,
+    "n_trials": 60,
+    "n_refused": 13,
+    "refusal_rate": 0.21666666666666667,
+    "n_issued": 47
+   },
+   "0.1": {
+    "mean_escape_test": 0.09365557025279246,
+    "std": 0.017380745801366525,
+    "frac_trials_covered": 0.6,
+    "n_trials": 60,
+    "n_refused": 0,
+    "refusal_rate": 0.0,
+    "n_issued": 60
+   },
+   "0.2": {
+    "mean_escape_test": 0.19419057907113466,
+    "std": 0.02095570152937505,
+    "frac_trials_covered": 0.7,
+    "n_trials": 60,
+    "n_refused": 0,
+    "refusal_rate": 0.0,
+    "n_issued": 60
+   }
+  },
+  "n_cal": 270,
+  "n_test": 450,
+  "drift": {
+   "0.05": {
+    "shift_0.00": 0.0417,
+    "shift_0.25": 0.0452,
+    "shift_0.50": 0.0509,
+    "shift_0.75": 0.0495,
+    "shift_1.00": 0.0504
+   },
+   "0.1": {
+    "shift_0.00": 0.0925,
+    "shift_0.25": 0.0991,
+    "shift_0.50": 0.1141,
+    "shift_0.75": 0.1252,
+    "shift_1.00": 0.1462
+   }
+  }
+ },
+ "gc10_yolov8s": {
+  "single_split": [
+   {
+    "alpha": 0.01,
+    "lambda": null,
+    "error": "no lambda achieves alpha=0.01: min certified risk is 0.0894 "
+   },
+   {
+    "alpha": 0.05,
+    "lambda": null,
+    "error": "no lambda achieves alpha=0.05: min certified risk is 0.0894 "
+   },
+   {
+    "alpha": 0.1,
+    "lambda": 0.015000000000000013,
+    "error": null,
+    "escape_cal": 0.095224171539961,
+    "escape_test": 0.10239958592132506,
+    "covered": false
+   },
+   {
+    "alpha": 0.2,
+    "lambda": 0.15500000000000003,
+    "error": null,
+    "escape_cal": 0.19444444444444445,
+    "escape_test": 0.17952587991718427,
+    "covered": true
+   }
+  ],
+  "repeated": {
+   "0.01": {
+    "mean_escape_test": 0.0,
+    "std": 0.0,
+    "frac_trials_covered": 1.0,
+    "n_trials": 60,
+    "n_refused": 60,
+    "refusal_rate": 1.0,
+    "n_issued": 0
+   },
+   "0.05": {
+    "mean_escape_test": 0.0,
+    "std": 0.0,
+    "frac_trials_covered": 1.0,
+    "n_trials": 60,
+    "n_refused": 60,
+    "refusal_rate": 1.0,
+    "n_issued": 0
+   },
+   "0.1": {
+    "mean_escape_test": 0.10211464201454089,
+    "std": 0.014269624688549453,
+    "frac_trials_covered": 0.46511627906976744,
+    "n_trials": 60,
+    "n_refused": 17,
+    "refusal_rate": 0.2833333333333333,
+    "n_issued": 43
+   },
+   "0.2": {
+    "mean_escape_test": 0.1969274672187716,
+    "std": 0.024195520573751215,
+    "frac_trials_covered": 0.5166666666666667,
+    "n_trials": 60,
+    "n_refused": 0,
+    "refusal_rate": 0.0,
+    "n_issued": 60
+   }
+  },
+  "n_cal": 342,
+  "n_test": 575,
+  "drift": {
+   "0.1": {
+    "shift_0.00": 0.1024,
+    "shift_0.25": 0.1172,
+    "shift_0.50": 0.131,
+    "shift_0.75": 0.1521,
+    "shift_1.00": 0.1901
+   }
+  }
+ },
+ "pcb_yolov8s": {
+  "single_split": [
+   {
+    "alpha": 0.01,
+    "lambda": null,
+    "error": "no lambda achieves alpha=0.01: min certified risk is 0.0319 "
+   },
+   {
+    "alpha": 0.05,
+    "lambda": 0.17499999999999993,
+    "error": null,
+    "escape_cal": 0.03986928104575163,
+    "escape_test": 0.035727969348659,
+    "covered": true
+   },
+   {
+    "alpha": 0.1,
+    "lambda": 0.54,
+    "error": null,
+    "escape_cal": 0.09052287581699346,
+    "escape_test": 0.07787356321839078,
+    "covered": true
+   },
+   {
+    "alpha": 0.2,
+    "lambda": 0.675,
+    "error": null,
+    "escape_cal": 0.1898692810457516,
+    "escape_test": 0.18591954022988508,
+    "covered": true
+   }
+  ],
+  "repeated": {
+   "0.01": {
+    "mean_escape_test": 0.0,
+    "std": 0.0,
+    "frac_trials_covered": 1.0,
+    "n_trials": 60,
+    "n_refused": 60,
+    "refusal_rate": 1.0,
+    "n_issued": 0
+   },
+   "0.05": {
+    "mean_escape_test": 0.04151405935450354,
+    "std": 0.015428730837128498,
+    "frac_trials_covered": 0.7457627118644068,
+    "n_trials": 60,
+    "n_refused": 1,
+    "refusal_rate": 0.016666666666666666,
+    "n_issued": 59
+   },
+   "0.1": {
+    "mean_escape_test": 0.09735632183908045,
+    "std": 0.018954808501908435,
+    "frac_trials_covered": 0.5333333333333333,
+    "n_trials": 60,
+    "n_refused": 0,
+    "refusal_rate": 0.0,
+    "n_issued": 60
+   },
+   "0.2": {
+    "mean_escape_test": 0.1923563218390805,
+    "std": 0.02958561855821712,
+    "frac_trials_covered": 0.6166666666666667,
+    "n_trials": 60,
+    "n_refused": 0,
+    "refusal_rate": 0.0,
+    "n_issued": 60
+   }
+  },
+  "n_cal": 102,
+  "n_test": 174,
+  "drift": {
+   "0.05": {
+    "shift_0.00": 0.0357,
+    "shift_0.25": 0.0406,
+    "shift_0.50": 0.0493,
+    "shift_0.75": 0.0558,
+    "shift_1.00": 0.0691
+   },
+   "0.1": {
+    "shift_0.00": 0.0779,
+    "shift_0.25": 0.0878,
+    "shift_0.50": 0.105,
+    "shift_0.75": 0.1246,
+    "shift_1.00": 0.1502
+   }
+  }
+ },
+ "magnetic_tile_yolov8s": {
+  "single_split": [
+   {
+    "alpha": 0.01,
+    "lambda": null,
+    "error": "no lambda achieves alpha=0.01: min certified risk is 0.0537 "
+   },
+   {
+    "alpha": 0.05,
+    "lambda": null,
+    "error": "no lambda achieves alpha=0.05: min certified risk is 0.0537 "
+   },
+   {
+    "alpha": 0.1,
+    "lambda": 0.33999999999999997,
+    "error": null,
+    "escape_cal": 0.09045584045584046,
+    "escape_test": 0.08762886597938144,
+    "covered": true
+   },
+   {
+    "alpha": 0.2,
+    "lambda": 0.615,
+    "error": null,
+    "escape_cal": 0.19045584045584044,
+    "escape_test": 0.17525773195876287,
+    "covered": true
+   }
+  ],
+  "repeated": {
+   "0.01": {
+    "mean_escape_test": 0.0,
+    "std": 0.0,
+    "frac_trials_covered": 1.0,
+    "n_trials": 60,
+    "n_refused": 60,
+    "refusal_rate": 1.0,
+    "n_issued": 0
+   },
+   "0.05": {
+    "mean_escape_test": 0.06349006789036962,
+    "std": 0.022421074600429424,
+    "frac_trials_covered": 0.36585365853658536,
+    "n_trials": 60,
+    "n_refused": 19,
+    "refusal_rate": 0.31666666666666665,
+    "n_issued": 41
+   },
+   "0.1": {
+    "mean_escape_test": 0.10420962199312714,
+    "std": 0.04385071942592351,
+    "frac_trials_covered": 0.5,
+    "n_trials": 60,
+    "n_refused": 0,
+    "refusal_rate": 0.0,
+    "n_issued": 60
+   },
+   "0.2": {
+    "mean_escape_test": 0.2006414662084765,
+    "std": 0.06024728039964115,
+    "frac_trials_covered": 0.5333333333333333,
+    "n_trials": 60,
+    "n_refused": 0,
+    "refusal_rate": 0.0,
+    "n_issued": 60
+   }
+  },
+  "n_cal": 117,
+  "n_test": 97,
+  "drift": {
+   "0.1": {
+    "shift_0.00": 0.0876,
+    "shift_0.25": 0.0976,
+    "shift_0.50": 0.1194,
+    "shift_0.75": 0.1509,
+    "shift_1.00": 0.2105
+   }
+  }
+ },
+ "kolektor_yolov8s": {
+  "single_split": [
+   {
+    "alpha": 0.01,
+    "lambda": null,
+    "error": "no lambda achieves alpha=0.01: min certified risk is 0.0756 "
+   },
+   {
+    "alpha": 0.05,
+    "lambda": null,
+    "error": "no lambda achieves alpha=0.05: min certified risk is 0.0756 "
+   },
+   {
+    "alpha": 0.1,
+    "lambda": 0.015000000000000013,
+    "error": null,
+    "escape_cal": 0.08566978193146418,
+    "escape_test": 0.1310861423220974,
+    "covered": false
+   },
+   {
+    "alpha": 0.2,
+    "lambda": 0.07499999999999996,
+    "error": null,
+    "escape_cal": 0.18380062305295952,
+    "escape_test": 0.18164794007490637,
+    "covered": true
+   }
+  ],
+  "repeated": {
+   "0.01": {
+    "mean_escape_test": 0.0,
+    "std": 0.0,
+    "frac_trials_covered": 1.0,
+    "n_trials": 60,
+    "n_refused": 60,
+    "refusal_rate": 1.0,
+    "n_issued": 0
+   },
+   "0.05": {
+    "mean_escape_test": 0.0,
+    "std": 0.0,
+    "frac_trials_covered": 1.0,
+    "n_trials": 60,
+    "n_refused": 60,
+    "refusal_rate": 1.0,
+    "n_issued": 0
+   },
+   "0.1": {
+    "mean_escape_test": 0.12554307116104868,
+    "std": 0.035537052094508956,
+    "frac_trials_covered": 0.36,
+    "n_trials": 60,
+    "n_refused": 35,
+    "refusal_rate": 0.5833333333333334,
+    "n_issued": 25
+   },
+   "0.2": {
+    "mean_escape_test": 0.18842072409488136,
+    "std": 0.05873614901541338,
+    "frac_trials_covered": 0.5833333333333334,
+    "n_trials": 60,
+    "n_refused": 0,
+    "refusal_rate": 0.0,
+    "n_issued": 60
+   }
+  },
+  "n_cal": 107,
+  "n_test": 89,
+  "drift": {
+   "0.1": {
+    "shift_0.00": 0.1311,
+    "shift_0.25": 0.1556,
+    "shift_0.50": 0.1882,
+    "shift_0.75": 0.2292,
+    "shift_1.00": 0.2857
+   }
+  }
+ }
+}

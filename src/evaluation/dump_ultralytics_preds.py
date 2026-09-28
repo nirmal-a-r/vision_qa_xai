@@ -41,6 +41,18 @@ DUMP_CONF = 0.001          # see module docstring
 DUMP_MAX_DET = 300
 
 
+def cache_tag(model, encoding="baseline", seed=0):
+    """Detector tag used in every cache file name.
+
+    <model stem>[_<encoding>][_s<seed>]: seed 0 of the baseline encoding is the
+    canonical cache (e.g. 'rtdetr-l'); other seeds and encodings get their own
+    files (e.g. 'yolov8s_s2', 'yolov8s_p2_training_free_s1').
+    """
+    stem = os.path.basename(str(model)).replace(".pt", "")
+    enc = encoding or "baseline"
+    return stem + ("" if enc == "baseline" else f"_{enc}") + (f"_s{int(seed)}" if int(seed) else "")
+
+
 def load_model(weights):
     from ultralytics import YOLO, RTDETR
     return (RTDETR if "rtdetr" in str(weights).lower() else YOLO)(weights)
@@ -76,8 +88,10 @@ def dump_split(weights, yolo_root, split, out_path, imgsz, device=0, batch=16):
     records = []
     for i in range(0, len(paths), batch):
         chunk = paths[i:i + batch]
+        # fp16 on the GPU (project document, Section 10.3): the same setting is used for
+        # the calibration, test and synthetic caches, so every score is comparable.
         results = model.predict(chunk, imgsz=imgsz, conf=DUMP_CONF,
-                                max_det=DUMP_MAX_DET, device=device,
+                                max_det=DUMP_MAX_DET, device=device, half=str(device) != "cpu",
                                 verbose=False, stream=False)
         for p, r in zip(chunk, results):
             H, W = r.orig_shape
@@ -97,9 +111,11 @@ def dump_split(weights, yolo_root, split, out_path, imgsz, device=0, batch=16):
             })
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    with open(out_path, "w") as f:
-        json.dump({"split": split, "weights": str(weights), "imgsz": imgsz,
-                   "records": records}, f)
+    tmp = out_path + ".tmp"
+    with open(tmp, "w") as f:                 # write-then-rename: an interrupted run never
+        json.dump({"split": split, "weights": str(weights), "imgsz": imgsz,   # leaves a half cache
+                   "half": str(device) != "cpu", "records": records}, f)
+    os.replace(tmp, out_path)
 
     n_gt = sum(len(r["gt_boxes"]) for r in records)
     n_neg = sum(1 for r in records if not r["gt_boxes"])
@@ -110,22 +126,39 @@ def dump_split(weights, yolo_root, split, out_path, imgsz, device=0, batch=16):
 
 
 def main():
+    try:
+        from src.utils.winenv import setup_console
+        setup_console()
+    except Exception:
+        pass
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", required=True, help="runs/results_*.json from training")
     ap.add_argument("--yolo_dir", default="data/yolo")
     ap.add_argument("--out_dir", default="runs/preds")
     ap.add_argument("--splits", default="cal,test")
+    ap.add_argument("--device", default="0", help="GPU index, or 'cpu'")
     a = ap.parse_args()
+    device = int(a.device) if a.device.isdigit() else a.device
 
     with open(a.results) as f:
         runs = json.load(f)
 
     for r in runs:
+        # Each encoding has its own image tree (data/yolo, data/yolo_cce,
+        # data/yolo_p2_<source>); a model is only ever scored on its own tree.
+        enc = r.get("encoding") or "baseline"
+        yolo_dir = a.yolo_dir if enc == "baseline" else f"data/yolo_{enc}"
+        if not os.path.isdir(os.path.join(yolo_dir, r["dataset"])):
+            print(f"[{r['dataset']}/{enc}] tree {yolo_dir} missing, skipping")
+            continue
         w = r["weights"]
         if not os.path.exists(w):
             print(f"[{r['dataset']}] missing weights {w}, skipping")
             continue
-        tag = f"{r['dataset']}_{r['model'].replace('.pt', '')}"
+        seed = int(r.get("seed", 0))
+        # Seed 0 is the canonical cache every analysis reads; other seeds get
+        # their own files instead of silently colliding with it.
+        tag = f"{r['dataset']}_{cache_tag(r['model'], enc, seed)}"
         print(f"[{tag}] imgsz={r['imgsz']}", flush=True)
         for split in a.splits.split(","):
             out = os.path.join(a.out_dir, f"{tag}_{split.strip()}.json")
@@ -133,8 +166,8 @@ def main():
                 print(f"  [{split.strip():5s}] cached, skipping")
                 continue
             try:
-                dump_split(w, os.path.join(a.yolo_dir, r["dataset"]), split.strip(),
-                           out, imgsz=r["imgsz"])
+                dump_split(w, os.path.join(yolo_dir, r["dataset"]), split.strip(),
+                           out, imgsz=r["imgsz"], device=device)
             except Exception as e:
                 import traceback
                 traceback.print_exc()

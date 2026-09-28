@@ -1,17 +1,23 @@
 """
 build_certified_notebook.py
 ===========================
-Builds notebook/VisionQA_CertifiedInspection.ipynb - one self-contained notebook.
+Builds notebook/VisionQA_CertifiedInspection.ipynb: one notebook that follows the
+"Certified Cold-Start Defect Inspection - Complete Project Document" section by
+section (docs/Project_Document.pdf), from the problem statement to every
+experimental stage (0-6), the research questions (RQ1-RQ4) and the status list.
 
-Design rules, learned the hard way earlier in this project:
+Design rules
+* The notebook imports the code from this repository (src/), so it can never
+  drift from what the scripts run; the first cell records the git commit and
+  library versions for provenance.
+* Nothing heavy runs by default: every GPU stage is a pipeline command, and the
+  notebook READS its outputs. Every result cell says exactly which command
+  produces its input when that input is missing, so Run All always finishes.
+* Every number is recomputed from artefacts on disk; nothing is typed in by hand
+  except where a cell explicitly quotes the first study (old splits) as context.
 
-* every src/ module is embedded as a string and registered into sys.modules, so
-  the notebook has no .py dependency and cannot silently drift from disk;
-* every number shown is recomputed in-cell from cached artefacts, so nothing is
-  a hard-coded claim that can rot;
-* negative results are first-class cells, not omissions. Four of the ideas tried
-  in this project failed, and a reader who cannot see that has no way to judge
-  the ones that worked.
+    python scripts/build_certified_notebook.py
+    python scripts/execute_notebook.py
 """
 
 from __future__ import annotations
@@ -22,731 +28,811 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-os.chdir(ROOT)
-
-OUT = "notebook/VisionQA_CertifiedInspection.ipynb"
-
-MODULES = [
-    "src/paper/figures.py",
-    "src/risk/conformal.py",
-    "src/risk/adaptive.py",
-    "src/risk/triage.py",
-    "src/risk/spi.py",
-    "src/risk/acquisition.py",
-    "src/evaluation/rigor.py",
-    "src/data/photometric.py",
-    "src/xai/faithfulness.py",
-    "src/xai/detector_saliency.py",
-    "src/agentic/inspector.py",
-    "src/agentic/llm_narrator.py",
-    "src/data/prepare_datasets.py",
-    "src/data/splits_and_yolo.py",
-    "src/data/build_cce_dataset.py",
-    "src/evaluation/train_baselines.py",
-    "src/evaluation/seed_analysis.py",
-]
+OUT = os.path.join(ROOT, "notebook", "VisionQA_CertifiedInspection.ipynb")
 
 cells = []
-def md(t): cells.append({"cell_type": "markdown", "metadata": {}, "source": t.splitlines(keepends=True)})
-def co(t): cells.append({"cell_type": "code", "execution_count": None, "metadata": {},
-                         "outputs": [], "source": t.splitlines(keepends=True)})
 
-# ---------------------------------------------------------------- title
-md(r"""# Certified Defect Inspection under Scarce Labels
 
-**What this notebook is.** A single self-contained record of the whole project:
-the method, every experiment, and every experiment that failed. All source is
-embedded below - there is no `.py` dependency. Select the kernel and Run All.
+def md(t):
+    cells.append({"cell_type": "markdown", "id": f"c{len(cells):03d}", "metadata": {},
+                  "source": t.strip("\n").splitlines(keepends=True)})
 
-**The claim.** An inspection system should not report a confidence. It should
-report a **guarantee**: given a target defect escape rate `alpha`, either return
-an operating point whose escape rate is certified at or below `alpha`, or refuse
-and hand the line back to human review. The refusal branch matters as much as
-the first - a method that always answers is a method that sometimes lies.
 
-**What is new.** Not the detector. The finding that the guarantee is bought with
-*labelled defects* rather than labelled parts, that this makes cold-start the
-binding constraint in practice, and a measured account of which acquisition
-strategies do and do not buy their way out of it.
+def co(t):
+    cells.append({"cell_type": "code", "id": f"c{len(cells):03d}", "execution_count": None,
+                  "metadata": {}, "outputs": [], "source": t.strip("\n").splitlines(keepends=True)})
 
-### How to read the results
 
-Cells are labelled with what they establish:
+# =============================================================== title
+md(r'''
+# Certified Cold-Start Defect Inspection (SPERC)
 
-| tag | meaning |
+A new inspection line needs a **certified defect-escape rate on day one**, but it has only 5-40
+real defect images to certify with. This notebook is the executable companion of the *Complete
+Project Document* (`docs/Project_Document.pdf`): it follows the document section by section and
+recomputes every number from the artefacts the pipeline writes.
+
+**How to use it.** Select the `vqaenv` interpreter as the kernel and *Run All*. Nothing heavy runs
+here; the GPU work is done by one command, and each result cell below says which command fills it:
+
+```
+vqaenv\Scripts\python.exe scripts\smoke_test.py          # 10-minute end-to-end check
+vqaenv\Scripts\python.exe scripts\run_pipeline.py        # the full run (Stages 1-6)
+```
+
+| Tag | Meaning |
 |---|---|
-| **VALIDATED** | property checked empirically, many trials |
-| **MEASURED** | number computed from real detector outputs |
-| **NEGATIVE** | idea tried and refuted - kept deliberately |
-| **UNTESTED** | stated as a hypothesis, not a claim |
-""")
+| **THEORY** | follows from SPI's theorems; checked numerically here |
+| **VALIDATED** | property checked empirically over many draws |
+| **MEASURED** | computed from real detector outputs |
+| **PENDING** | needs pipeline output that is not on disk yet (the cell says how to make it) |
+''')
 
-# ---------------------------------------------------------------- loader
-md("## 0 · Embedded source\n\nEvery module is carried inside this notebook and registered as an\nimportable package, so `from src.risk.conformal import ...` below resolves to\ncode embedded here rather than to anything on disk.")
-co('''import sys, types, json, os, glob, math, warnings
-warnings.filterwarnings("ignore")
+co(r'''
+import os, sys, json, glob, subprocess, platform, warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
 
-# Ensure working directory is always repository root, even when kernel starts in notebook/
-_cur = os.path.abspath(os.getcwd())
-ROOT = _cur
-while _cur and _cur != os.path.dirname(_cur):
-    if os.path.exists(os.path.join(_cur, "data", "processed")) or os.path.exists(os.path.join(_cur, "runs")):
-        ROOT = _cur
-        break
-    _cur = os.path.dirname(_cur)
-os.chdir(ROOT)
-if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)
+def _find_root(start):
+    cur = os.path.abspath(start)
+    while True:
+        if os.path.exists(os.path.join(cur, "src", "risk", "sperc.py")) and \
+           os.path.exists(os.path.join(cur, "configs", "config.yaml")):
+            return cur
+        nxt = os.path.dirname(cur)
+        if nxt == cur:
+            return None
+        cur = nxt
 
-def get_path(rel):
-    if not rel:
-        return rel
-    for candidate in [rel, os.path.join("..", rel), os.path.join(ROOT, rel)]:
-        if os.path.exists(candidate):
-            return candidate
-    cur = os.path.abspath(os.getcwd())
-    while cur and cur != os.path.dirname(cur):
-        candidate = os.path.join(cur, rel)
-        if os.path.exists(candidate):
-            return candidate
-        cur = os.path.dirname(cur)
-    return rel
+ROOT = os.environ.get("VQA_ROOT") or _find_root(os.getcwd())
+assert ROOT, "open this notebook from inside the vision_qa_xai repository"
+WORK = os.environ.get("VQA_WORK") or ROOT          # where data/ and runs/ live
+sys.path.insert(0, ROOT)
+os.chdir(WORK)
+R = lambda *p: os.path.join(ROOT, *p)              # code / config
+W = lambda *p: os.path.join(WORK, *p)              # data / results
 
-import numpy as np, pandas as pd
-import matplotlib; import matplotlib.pyplot as plt
-matplotlib.rcParams.update({"figure.dpi": 110, "savefig.dpi": 200,
-                            "font.size": 9, "axes.grid": True, "grid.alpha": .25})
-
-_SRC = {}
-def _register(name, source):
-    parts = name.split(".")
-    for i in range(1, len(parts)):
-        pkg = ".".join(parts[:i])
-        if pkg not in sys.modules:
-            p = types.ModuleType(pkg); p.__path__ = []; sys.modules[pkg] = p
-    m = types.ModuleType(name); m.__name__ = name; m.__file__ = f"<inline:{name}>"
-    sys.modules[name] = m
-    exec(compile(source, f"<inline:{name}>", "exec"), m.__dict__)
-    if len(parts) > 1:
-        setattr(sys.modules[".".join(parts[:-1])], parts[-1], m)
-print(f"working directory: {os.getcwd()}")
-print("loader ready")''')
-
-for p in MODULES:
-    if not os.path.exists(p):
-        print(f"  WARNING missing {p}")
-        continue
-    name = p.replace("/", ".")[:-3]
-    src = io.open(p, encoding="utf-8").read()
-    co(f'_SRC["{name}"] = json.loads({json.dumps(src)!r})\nprint("embedded {name}  ({len(src)} chars)")')
-
-co('''for _n, _s in _SRC.items():
-    _register(_n, _s)
-print(f"registered {len(_SRC)} modules\\n")
-
-from src.risk.conformal import conformal_risk_control, escape_threshold_grid
-from src.risk.spi import escape_confidence, crc_threshold, empirical_risk
-from src.risk.acquisition import acquire, weighted_crc_threshold, NEG_INF
+import numpy as np, pandas as pd, yaml
+import matplotlib
+try:                                   # figures inline even if MPLBACKEND=Agg is set in the shell
+    get_ipython().run_line_magic("matplotlib", "inline")
+except Exception:
+    pass
+import matplotlib.pyplot as plt
+from IPython.display import display, Markdown, Image
+pd.set_option("display.width", 200); pd.set_option("display.max_columns", 40)
 from src.paper import figures as F
+F.set_style(9)
+matplotlib.rcParams.update({"figure.dpi": 110, "axes.grid": True, "grid.alpha": .25})
+CFG = yaml.safe_load(open(R("configs", "config.yaml")))
+OK = F.OKABE
+METHOD_COLOR = {"crc": OK[0], "sperc_tierN": OK[1], "sperc_nominal": OK[2], "crc_at_cap": OK[3],
+                "acq_uncorrected": OK[4], "legacy": OK[5], "naive_pooled": "#999999"}
+METHOD_LABEL = {"crc": "CRC (real only)", "sperc_tierN": "SPERC, Tier N = target",
+                "sperc_nominal": "SPERC at alpha = target", "crc_at_cap": "CRC at SPERC's Tier H cap",
+                "acq_uncorrected": "defect-seeking acquisition (uncorrected)",
+                "legacy": "old spi.py heuristic", "naive_pooled": "naive pooling (invalid)"}
 
-_g = escape_threshold_grid(51)
-_L = np.tile(np.linspace(0.6, 0.0, 51), (200, 1))
-print("self-test  CRC lambda =", round(conformal_risk_control(_L, _g, 0.10), 4))
+def pending(what, command):
+    display(Markdown(f"**PENDING** - {what} is not on disk yet. Produce it with:\n\n"
+                     f"```\n{command}\n```"))
 
-DATASETS = ["neu", "gc10", "pcb", "magnetic_tile", "kolektor"]
-PRIMARY  = ["kolektor", "magnetic_tile"]   # the only sets with clean parts
-ALPHAS   = [0.01, 0.05, 0.10, 0.20]
-HAVE = {d: os.path.exists(get_path(f"runs/preds/{d}_yolov8s_cal.json")) for d in DATASETS}
-print("cached predictions:", {k: v for k, v in HAVE.items()})''')
+def read_json(p):
+    with open(p, encoding="utf-8") as f:
+        return json.load(f)
 
-# ---------------------------------------------------------------- data
-md("""## 1 · The data, and why two of the five carry the argument
+# ---- provenance
+def _git(*a):
+    try:
+        return subprocess.check_output(["git", *a], cwd=ROOT, stderr=subprocess.DEVNULL).decode().strip()
+    except Exception:
+        return "n/a"
+import scipy
+prov = {"repository": ROOT, "results folder": WORK, "git commit": _git("rev-parse", "--short", "HEAD"),
+        "uncommitted changes": ("yes" if _git("status", "--porcelain") not in ("", "n/a") else "no"),
+        "python": platform.python_version(), "executable": sys.executable,
+        "numpy": np.__version__, "scipy": scipy.__version__, "pandas": pd.__version__}
+try:
+    import torch
+    prov["torch"] = torch.__version__
+    prov["CUDA available"] = torch.cuda.is_available()
+    if torch.cuda.is_available():
+        prov["GPU"] = torch.cuda.get_device_name(0)
+        prov["compute capability"] = "%d.%d" % torch.cuda.get_device_capability(0)
+        prov["sm_120 in build (RTX 50xx)"] = any(a.startswith("sm_12") for a in torch.cuda.get_arch_list())
+except Exception as e:
+    prov["torch"] = f"not importable ({type(e).__name__}) - analysis cells still run"
+try:
+    import ultralytics; prov["ultralytics"] = ultralytics.__version__
+except Exception:
+    prov["ultralytics"] = "not installed"
+display(pd.DataFrame(prov.items(), columns=["item", "value"]).set_index("item"))
+''')
 
-Five industrial datasets. They are **not** interchangeable, and the split matters
-more than the count.
+# =============================================================== 1-2 problem
+md(r'''
+## 1 · Problem (document Sections 1-2)
 
-Escape loss is only defined on an image that *contains* a defect - a clean part
-cannot escape. NEU, GC10 and PCB have a defect in **every** image, so on those
-"auto-accept" can never be correct and any triage number computed on them is an
-artefact. Only Magnetic-Tile and KolektorSDD2 contain genuine clean parts, so
-they are the only datasets on which the human-review economics can be evaluated
-at all.""")
-co('''rows = []
-for d in DATASETS:
-    p = get_path(f"data/processed/{d}_coco.json")
-    if not os.path.exists(p):
-        continue
-    j = json.load(open(p, encoding="utf-8"))
-    n = len(j.get("images", []))
-    clean = sum(1 for im in j.get("images", []) if im.get("n_boxes", 1) == 0)
-    rows.append(dict(dataset=d, images=n, boxes=len(j.get("annotations", [])),
-                     classes=len(j.get("categories", [])), clean=clean,
-                     clean_pct=round(100 * clean / max(n, 1), 1),
-                     role="primary" if d in PRIMARY else "replication"))
+Certify, before a line has produced enough scrap to learn from, that a frozen object detector lets
+through at most a chosen fraction `alpha` of defective parts - and refuse when that cannot be
+certified.
 
-if not rows:
-    # Deterministic fallback from dataset stats
-    rows = [
-        dict(dataset="neu", images=1800, boxes=4189, classes=6, clean=0, clean_pct=0.0, role="replication"),
-        dict(dataset="gc10", images=2294, boxes=3563, classes=10, clean=2, clean_pct=0.1, role="replication"),
-        dict(dataset="pcb", images=693, boxes=2953, classes=6, clean=0, clean_pct=0.0, role="replication"),
-        dict(dataset="magnetic_tile", images=1344, boxes=447, classes=5, clean=957, clean_pct=71.2, role="primary"),
-        dict(dataset="kolektor", images=3337, boxes=391, classes=1, clean=2981, clean_pct=89.3, role="primary"),
-    ]
+**Routing rule.** A part is auto-accepted when no detection clears the threshold `lambda`, and sent
+to review otherwise. The detector never saw the calibration images.
 
-df_data = pd.DataFrame(rows)
-print(df_data.to_string(index=False))
-print()
-print("Only the two 'primary' rows have clean parts, so only they can measure")
-print("review load. The other three test escape-risk control only.")
+**Two escape events, defined once (Section 2.2)**, both 0/1 per defective image, reported
+separately and never mixed (`src/risk/escape.py`):
 
-fig, axes = plt.subplots(1, 2, figsize=(11, 3.6))
-x = np.arange(len(df_data))
-axes[0].bar(x, df_data.images - df_data.clean, label="defective", color=F.OKABE[1])
-axes[0].bar(x, df_data.clean, bottom=df_data.images - df_data.clean, label="clean", color=F.OKABE[2])
-axes[0].set_xticks(x); axes[0].set_xticklabels(df_data.dataset, rotation=18, fontsize=8)
-axes[0].set_ylabel("images"); axes[0].legend(fontsize=8)
-axes[0].set_title("Composition: only two datasets contain clean parts")
-axes[1].bar(x, df_data.clean_pct, color=[F.OKABE[0] if r == "primary" else "#bbbbbb" for r in df_data.role])
-axes[1].set_xticks(x); axes[1].set_xticklabels(df_data.dataset, rotation=18, fontsize=8)
-axes[1].set_ylabel("% clean parts")
-axes[1].set_title("Blue = review load measurable; grey = escape risk only")
-fig.tight_layout(); plt.show()''')
+$$c_i^{\text{part}} = \max_{d \in f(X_i)} \operatorname{score}(d), \qquad
+  c_i^{\text{loc}} = \min_{g \in G(X_i)} \max\{\operatorname{score}(d) : \operatorname{IoU}(d,g) \ge \tau\}$$
 
-# ---------------------------------------------------------------- reduction
-md(r"""## 2 · The reduction — **VALIDATED**
+with an empty set giving $-\infty$ (the part always escapes). Escape at threshold $\lambda$ is
+$L_i(\lambda) = \mathbf 1\{c_i < \lambda\}$, so with nonconformity $s = -c$ the escape guarantee
+$\mathbb P(c_{m+1} < \hat\lambda) \le \alpha$ is exactly split-conformal coverage (Section 2.3).
+It is a rate **per defective part**; per shipped part it is this times the line's prevalence.
+''')
 
-Conformal risk control for detection looks like it needs machinery for
-set-valued outputs. It does not. For a defective image `i` define its **escape
-confidence**
-
-$$c_i \;=\; \min_{g \in \text{GT}(i)} \; \max \{\, s_d \;:\; \mathrm{IoU}(d, g) \ge \tau \,\}$$
-
-— the confidence of the *weakest-covered* ground-truth box, and $-\infty$ if any
-box is never matched. The image-level escape loss is then simply
-
-$$L_i(\lambda) = \mathbf{1}\{\lambda > c_i\}, \qquad
-  \hat R_n(\lambda) = \tfrac1n \textstyle\sum_i \mathbf{1}\{c_i < \lambda\} = \hat F_n(\lambda)$$
-
-so CRC's rule — the smallest $\lambda$ with
-$\frac{n}{n+1}\hat R_n(\lambda) + \frac{B}{n+1} \le \alpha$ — is **a quantile of
-the $c_i$**. The loss curve collapses to one scalar per image, which puts
-detection risk control into the plain scalar setting the conformal literature is
-written for.""")
-co('''# VALIDATED: coverage of CRC on the reduced scalar score, 400 trials
-res = []
-for alpha in [0.05, 0.10, 0.20]:
-    risks = []
+co(r'''
+# THEORY -> VALIDATED: the scalar reduction. CRC on c controls escape (400 draws per alpha).
+from src.risk.escape import (part_escape_score, localized_escape_score, crc_escape_threshold,
+                             empirical_escape)
+rec = {"gt_boxes": [[0, 0, 10, 10], [50, 50, 60, 60]],
+       "pred_boxes": [[0, 0, 10, 10], [51, 50, 61, 60], [200, 200, 210, 210]],
+       "pred_scores": [0.80, 0.40, 0.95]}
+print(f"example part: c_part = {part_escape_score(rec):.2f} (any detection counts), "
+      f"c_loc = {localized_escape_score(rec):.2f} (weakest-covered defect)")
+rows = []
+for alpha in (0.05, 0.10, 0.20):
+    esc = []
     for t in range(400):
         r = np.random.default_rng(1000 + t)
-        cal, tst = r.beta(2, 3, size=60), r.beta(2, 3, size=400)
-        risks.append(empirical_risk(tst, crc_threshold(cal, alpha)))
-    res.append(dict(alpha=alpha, mean_test_escape=round(float(np.mean(risks)), 4),
-                    holds=bool(np.mean(risks) <= alpha + 1e-3)))
-print(pd.DataFrame(res).to_string(index=False))
-print("\\nThe reduction is sound: CRC applied to c_i controls the escape rate.")''')
+        cal, tst = r.beta(2, 3, 60), r.beta(2, 3, 400)
+        esc.append(empirical_escape(tst, crc_escape_threshold(cal, alpha)))
+    j = int(np.floor(alpha * 61 + 1e-9))
+    rows.append(dict(alpha=alpha, mean_escape=round(float(np.mean(esc)), 4), theory_j_over_m1=round(j / 61, 4),
+                     se=round(float(np.std(esc) / 20), 4), holds=bool(np.mean(esc) <= alpha + 3 * np.std(esc) / 20)))
+display(pd.DataFrame(rows))
+''')
 
-# ---------------------------------------------------------------- guarantee
-md("""## 3 · The guarantee on real detectors — **VALIDATED**
+md(r'''
+### 1.1 · Why cold start breaks conformal risk control (Section 2.4) - **THEORY**
 
-The headline empirical claim. For each dataset the calibration block is
-resampled many times, a threshold is calibrated, and the realised escape rate is
-measured on the held-out test block.
+With `m` real defective calibration images CRC certifies the `k`-th smallest real escape score only
+when `k/(m+1) <= alpha`. Two consequences: a **refusal floor** (nothing certifiable when
+`1/(m+1) > alpha`: below m = 19 at 0.05, below m = 9 at 0.10) and **quantisation** (certifiable
+escape levels are multiples of `1/(m+1)`; at m = 15, alpha = 0.10 only the lowest real score is
+certifiable, so almost every part goes to review).
+''')
 
-Two things to watch for, both of which are correct behaviour rather than bugs:
+co(r'''
+ms = np.arange(1, 61)
+fig, axes = plt.subplots(1, 2, figsize=(11, 3.5))
+for a, col in ((0.05, OK[0]), (0.10, OK[1])):
+    j = np.floor(a * (ms + 1) + 1e-9)
+    axes[0].step(ms, j / (ms + 1), where="post", color=col, lw=2, label=f"alpha = {a}")
+    axes[0].axhline(a, color=col, lw=1, ls=":")
+axes[0].set_xlabel("real defective calibration images m"); axes[0].set_ylabel("largest certifiable escape level")
+axes[0].set_title("CRC can only use multiples of 1/(m+1) of its budget"); axes[0].legend()
+axes[1].plot(ms, 1 / (ms + 1), color=OK[0], lw=2)
+for a in (0.05, 0.10):
+    axes[1].axhline(a, color="0.4", lw=1, ls="--"); axes[1].text(58, a + .004, f"alpha = {a}", ha="right", fontsize=8)
+axes[1].axvspan(5, 40, color=OK[4], alpha=.12); axes[1].text(22, .4, "cold start: m = 5-40", ha="center", fontsize=8)
+axes[1].set_xlabel("m"); axes[1].set_ylabel("refusal floor 1/(m+1)"); axes[1].set_title("Below the floor CRC must refuse")
+fig.tight_layout(); plt.show()
+print("m = 19 is the first m that certifies alpha = 0.05; m = 9 the first for 0.10.",
+      "KolektorSDD2 had 53 and Magnetic-Tile 59 defective calibration images in the first study.")
+''')
 
-* **refusal.** At `alpha = 0.01` every dataset refuses. That is not failure - the
-  finite-sample term `1/(n+1)` alone exceeds the budget, so no threshold can be
-  certified and the honest answer is to say so.
-* **CRC bounds the mean, not every draw.** Individual splits can exceed `alpha`;
-  the theorem is about the expectation.""")
-co('''p = get_path("runs/risk_results.json")
-if not os.path.exists(p):
-    print("run scripts/run_all_experiments.py to populate this section")
+# =============================================================== 3 RQs
+md(r'''
+## 2 · Research questions (Section 3)
+
+| # | Question | Measured by | Fails if | Answered in |
+|---|---|---|---|---|
+| RQ1 | Can synthetic defects tighten a certified escape threshold at m = 5-40 without breaking the guarantee? | review load at the issued threshold vs CRC at equal m | no tightening in the best case | Stage 1 (§6), Stage 4 (§9) |
+| RQ2 | What exactly is guaranteed when the generator is bad? | realised escape under misaligned synthetic data vs Tier H | escape above Tier H beyond sampling error | Stage 0 (§4), Stage 5 (§10) |
+| RQ3 | Does a better generator buy certification with fewer real defects? | m-star per generator at a fixed Tier H cap; KS alignment | no difference, or alignment does not predict m-star | §11 |
+| RQ4 | How many real defects must a new line collect before it can be certified? | Tier H cap as a function of (m, N, alpha, beta) vs held-out outcomes | planned and realised caps disagree | §3.3, §12 |
+
+Out of scope: beating published mAP on NEU-DET (the claim is denominated in real labelled defects),
+and faithfulness-gated triage (dropped from the contributions; Section 13).
+''')
+
+# =============================================================== 3 method
+md(r'''
+## 3 · The method: SPERC (Sections 6 and 8)
+
+**SPERC (Synthetic-Powered Escape-Risk Certification)** calibrates the scalar escape score with the
+exact rank-coupled transporter of Synthetic-Powered Predictive Inference (SPI, Bashari et al.,
+NeurIPS 2025; `src/risk/spi_exact.py`), using `m` real and `N` synthetic defects, and issues two
+statements, not one (`src/risk/sperc.py`):
+
+* **Tier H (hard, SPI Theorem 3.5)** - for *any* synthetic data:
+  $\mathbb P(\text{escape}) \le 1 - |\{j \in [m+1] : R_j^+ \le \lceil (1-\alpha)(N+1)\rceil\}|/(m+1)$.
+  Depends only on (m, N, alpha, beta), so a plant can compute it before collecting data.
+* **Tier N (near-nominal, SPI Theorem 3.3)**:
+  $\alpha - \beta - \varepsilon - \tfrac{1}{N+1} \le \mathbb P(\text{escape}) \le \alpha + \beta + \varepsilon$,
+  with $\varepsilon$ the (unobservable) distance between real and synthetic order-statistic laws.
+* **Refusal** if no beta gives a Tier H cap at or below the plant's `alpha_max`.
+
+Rank window of real rank r among N synthetic scores:
+$p_{m,N,r}(k) = \binom{k+r-2}{r-1}\binom{N+m-k-r+2}{m-r+1}/\binom{N+m+1}{m+1}$,
+$R_r^- = \max\{t : F(t-1) \le \beta/2\}$, $R_r^+ = \min\{t : F(t) \ge 1-\beta/2\}$.
+''')
+co(r'''
+display(Image(filename=R("figures", "fig15_sperc_architecture.png")) if os.path.exists(R("figures", "fig15_sperc_architecture.png"))
+        else F.sperc_architecture_diagram())
+''')
+
+co(r'''
+# THEORY: the rank law and the windows (depend on m, N, beta only - never on scores)
+from src.risk.spi_exact import rank_pmf, rank_windows, tier_h_cap, tier_h_floor
+m, N, beta = 15, 1000, 0.05
+fig, axes = plt.subplots(1, 2, figsize=(11, 3.4))
+for r, col in ((1, OK[0]), (8, OK[2]), (16, OK[1])):
+    p = rank_pmf(m, N, r); axes[0].plot(np.arange(1, N + 2), p, color=col, lw=1.6, label=f"r = {r}")
+axes[0].set_xlabel("position k among N = 1000 synthetic scores"); axes[0].set_ylabel("p_{m,N,r}(k)")
+axes[0].set_title("Where the r-th real order statistic lands (m = 15)"); axes[0].legend()
+lo, hi = rank_windows(m, N, beta)
+axes[1].vlines(np.arange(1, m + 2), lo, hi, color=OK[0], lw=3)
+axes[1].axhline(int(np.ceil(0.95 * (N + 1))), color=OK[1], ls="--", lw=1.2, label="ceil((1-alpha)(N+1)), alpha = 0.05")
+axes[1].set_xlabel("real rank r"); axes[1].set_ylabel("synthetic index window [R-, R+]")
+axes[1].set_title("Rank windows at beta = 0.05"); axes[1].legend(fontsize=8)
+fig.tight_layout(); plt.show()
+print(f"sum of every pmf = 1: {all(abs(rank_pmf(m, N, r).sum() - 1) < 1e-10 for r in range(1, m + 2))}; "
+      f"Tier H cap here = {tier_h_cap(m, N, 0.05, beta):.4f} (coverage floor {1 - tier_h_cap(m, N, 0.05, beta):.4f})")
+''')
+
+md(r'''
+### 3.3 · Commissioning table (Section 8.4) - **THEORY**, computed, not measured
+
+The hard escape cap a plant can plan with before collecting data (N = 1,000 synthetic defects).
+The cell asserts that every value equals the document's table.
+''')
+co(r'''
+from src.risk.sperc import commissioning_table
+DOC = {5: (0.333, 0.167, 0.333), 10: (0.182, 0.182, 0.273), 15: (0.188, 0.125, 0.250),
+       25: (0.154, 0.115, 0.231), 40: (0.122, 0.098, 0.195)}
+rows = []
+for m_, want in DOC.items():
+    j = int(np.floor(0.10 * (m_ + 1) + 1e-9))
+    got = (tier_h_cap(m_, 1000, .05, .05), tier_h_cap(m_, 1000, .05, .20), tier_h_cap(m_, 1000, .10, .05))
+    assert tuple(round(g, 3) for g in got) == want, (m_, got, want)
+    rows.append({"real defects m": m_, "CRC at alpha = 0.10": "refuses" if j == 0 else f"up to order statistic {j}",
+                 "Tier H, a=.05 b=.05": round(got[0], 3), "Tier H, a=.05 b=.20": round(got[1], 3),
+                 "Tier H, a=.10 b=.05": round(got[2], 3)})
+display(pd.DataFrame(rows).set_index("real defects m"))
+print("All 15 caps equal the document's Section 8.4 table. Cross-check: coverage floor at m = 15,",
+      f"a = b = 0.05 is {1 - tier_h_cap(15, 1000, .05, .05):.4f} (SPI's example: at least 0.80).")
+
+fig, ax = plt.subplots(figsize=(7.2, 3.6))
+mm = np.arange(3, 81)
+for (a, b), col in (((.05, .05), OK[0]), ((.05, .20), OK[2]), ((.10, .05), OK[1])):
+    ax.step(mm, [tier_h_cap(int(x), 1000, a, b) for x in mm], where="post", color=col, lw=1.8,
+            label=f"alpha = {a}, beta = {b}")
+ax.set_xlabel("real defective calibration images m"); ax.set_ylabel("Tier H cap (hard escape bound)")
+ax.set_title("RQ4: the planning curve, N = 1000"); ax.legend(fontsize=8); fig.tight_layout(); plt.show()
+''')
+
+# =============================================================== Stage 0
+md(r'''
+## 4 · Stage 0 - SPI on synthetic Beta scores (Section 12) - **VALIDATED**
+
+Stop rule: realised coverage outside SPI's Theorem 3.3 / 3.5 bounds = implementation bug. The unit
+tests `tests/test_spi_exact.py` (Stage 0) and `tests/test_sperc.py` are run below, then a
+simulation of a new line with m = 15 real defects shows both tiers at work: with a **good**
+generator SPERC operates near its target, with a **bad** one it degrades to - but not beyond - its
+Tier H cap, and naive pooling has no guarantee at all.
+''')
+co(r'''
+r = subprocess.run([sys.executable, "-m", "pytest", "-q", "--color=no", "-p", "no:cacheprovider",
+                    R("tests", "test_spi_exact.py"), R("tests", "test_sperc.py")],
+                   cwd=ROOT, capture_output=True, text=True)
+print(r.stdout[-1500:] or r.stderr[-1500:])
+STAGE0_PASSED = r.returncode == 0
+print("STAGE 0:", "PASSED - implementation reproduces SPI's bounds" if STAGE0_PASSED else "FAILED - fix before anything else")
+''')
+co(r'''
+from src.risk.sperc import certify_crc, certify_sperc
+from src.risk.baselines import naive_pooled_crc_threshold
+from scipy.stats import beta as Beta
+REAL = (5, 2)                      # real escape scores ~ Beta(5, 2): true escape = BetaCDF(lambda)
+pesc = lambda lam: 0.0 if lam == -np.inf else (1.0 if lam == np.inf else float(Beta.cdf(lam, *REAL)))
+rng = np.random.default_rng(0)
+rows = []
+for gname, syn in (("good generator", (5, 2)), ("bad generator (defects far too easy)", (12, 1.5))):
+    e = {k: [] for k in ("crc", "sperc", "naive")}; iss = []
+    for _ in range(600):
+        cr, cs = rng.beta(*REAL, 15), rng.beta(*syn, 1000)
+        c = certify_crc(cr, 0.10); e["crc"].append(pesc(c.threshold)); iss.append(c.issued)
+        s = certify_sperc(cr, cs, 0.05, beta=0.05); e["sperc"].append(pesc(s.threshold))
+        e["naive"].append(pesc(naive_pooled_crc_threshold(cr, cs, 0.10)))
+    rows.append({"generator": gname, "CRC at 0.10": round(np.mean(e["crc"]), 3),
+                 "SPERC a=0.05 b=0.05": round(np.mean(e["sperc"]), 3),
+                 "Tier N bound": 0.10, "Tier H cap": round(s.tier_h_cap, 4),
+                 "naive pooling": round(np.mean(e["naive"]), 3)})
+display(pd.DataFrame(rows).set_index("generator"))
+print("Mean true escape over 600 calibration draws, m = 15, N = 1000.")
+''')
+
+# =============================================================== datasets
+md(r'''
+## 5 · Datasets, splits and the cold-start protocol (Section 9)
+
+Five datasets with different jobs; the headline rests on the two with clean parts (KolektorSDD2,
+Magnetic-Tile), where review load is measurable. NEU-DET, GC10-DET and PCB are validity checks
+(escape control only). MVTec AD is the Stage-2 bridge. Splits are train / cal / test with cal never
+seen by training or model selection (the detector's own val slice is carved from train), and the
+defect-aware allocation (defective 45/30/25, clean 60/15/25) roughly halves every alpha floor.
+''')
+co(r'''
+ROLE = {d: "primary" for d in CFG["primary_datasets"]}; ROLE.update({d: "validity check" for d in CFG["validity_datasets"]})
+rows = []
+for d in CFG["datasets"]:
+    p = W("data", "processed", f"{d}_coco.json")
+    if not os.path.exists(p):
+        continue
+    j = read_json(p)
+    n = len(j["images"]); clean = sum(1 for im in j["images"] if im.get("n_boxes", 1) == 0)
+    row = dict(dataset=d, role=ROLE.get(d, "-"), images=n, clean=clean, boxes=len(j["annotations"]),
+               classes=len(j["categories"]))
+    for s in ("train", "val", "cal", "test"):
+        sp = W("data", "processed", "splits", f"{d}_{s}.json")
+        if os.path.exists(sp):
+            row[f"{s} defective"] = sum(1 for im in read_json(sp)["images"] if im.get("n_boxes", 1) > 0)
+    if "cal defective" in row:
+        row["alpha floor 1/(m+1)"] = round(1 / (row["cal defective"] + 1), 4)
+    rows.append(row)
+if rows:
+    DS = pd.DataFrame(rows).set_index("dataset"); display(DS)
+    print("totals:", int(DS.images.sum()), "images,", int(DS.boxes.sum()), "boxes,", int(DS.classes.sum()), "classes",
+          "(the document: 9,468 images, 11,543 boxes, 28 classes across the five)")
+    fig, ax = plt.subplots(figsize=(8, 3.2))
+    x = np.arange(len(DS))
+    ax.bar(x, DS.images - DS.clean, color=OK[1], label="defective", width=.6)
+    ax.bar(x, DS.clean, bottom=DS.images - DS.clean, color=OK[2], label="clean", width=.6)
+    ax.set_xticks(x); ax.set_xticklabels(DS.index); ax.set_ylabel("images"); ax.legend()
+    ax.set_title("Only the primary datasets contain clean parts"); fig.tight_layout(); plt.show()
 else:
-    risk = json.load(open(p, encoding="utf-8"))
-    rows = []
-    for name, v in sorted(risk.items()):
-        for a, e in sorted(v["repeated"].items(), key=lambda kv: float(kv[0])):
-            n, ni, nr = e["n_trials"], e["n_issued"], e["n_refused"]
-            cond = e["mean_escape_test"] if ni else float("nan")
-            uncond = (ni * cond) / n if ni else 0.0
-            rows.append(dict(dataset=name.replace("_yolov8s", ""), alpha=float(a),
-                             refusal_pct=round(100 * nr / n, 1),
-                             risk_if_issued=(round(cond, 4) if ni else None),
-                             risk_unconditional=round(uncond, 4),
-                             holds=bool(uncond <= float(a) + 1e-9)))
-    df_risk = pd.DataFrame(rows)
-    print(df_risk.to_string(index=False))
-    print(f"guarantee held on {int(df_risk.holds.sum())}/{len(df_risk)} operating points")
-    print("(`risk_if_issued` is shown for transparency but is NOT the quantity CRC")
-    print(" bounds - conditioning on issuance is a selection on the calibration draw.)")
+    pending("the prepared datasets (data/processed)", r"vqaenv\Scripts\python.exe scripts\run_pipeline.py --datasets kolektor,magnetic_tile,neu,gc10,pcb")
+print(f"split settings: {CFG['splits']}")
+''')
 
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4))
-    for d, g in df_risk.groupby("dataset"):
-        axes[0].plot(g.alpha, g.risk_unconditional, "o-", label=d, lw=1.6, ms=5)
-    lim = [0, df_risk.alpha.max() * 1.08]
-    axes[0].plot(lim, lim, "k--", lw=1.2, label="alpha (budget)")
-    axes[0].set_xlabel("target alpha"); axes[0].set_ylabel("realised escape (unconditional)")
-    axes[0].set_title("Guarantee holds: every point on or below the diagonal")
-    axes[0].legend(fontsize=7)
+# =============================================================== detectors
+md(r'''
+## 6 · Detectors and the Windows / RTX 5060 setup (Sections 10, 12 Stage 3)
 
-    piv = df_risk.pivot(index="dataset", columns="alpha", values="refusal_pct")
-    im = axes[1].imshow(piv.values, cmap="viridis", aspect="auto", vmin=0, vmax=100)
-    axes[1].set_xticks(range(len(piv.columns))); axes[1].set_xticklabels(piv.columns)
-    axes[1].set_yticks(range(len(piv.index))); axes[1].set_yticklabels(piv.index, fontsize=8)
-    axes[1].set_xlabel("alpha"); axes[1].set_title("Refusal rate % (refusing is correct)")
-    for i in range(piv.shape[0]):
-        for j in range(piv.shape[1]):
-            axes[1].text(j, i, f"{piv.values[i,j]:.0f}", ha="center", va="center",
-                         color="w" if piv.values[i,j] < 60 else "k", fontsize=7)
-    plt.colorbar(im, ax=axes[1], fraction=.046)
-    fig.tight_layout(); plt.show()''')
+RT-DETR-L is the main detector (NMS-free, so calibration targets the model's own output); YOLOv8s
+the comparison. Three seeds, primary datasets first, one GPU job at a time. Detector accuracy is
+**context only** - the claim is denominated in real defects, not mAP.
 
-# ---------------------------------------------------------------- certificate quality
-md(r"""## 3.5 · Certificate-quality audit — **MEASURED**
+Training is not run from the notebook (it takes GPU-days). Run it in a terminal:
 
-The CRC theorem controls expected escape risk under exchangeability. That is the
-safety claim. It does **not** say that a particular held-out split will land
-below its target, nor does it quantify the operational cost of the safe rule.
+```
+vqaenv\Scripts\python.exe scripts\check_ready.py
+vqaenv\Scripts\python.exe scripts\run_pipeline.py --wait-for-gpu
+```
+''')
+co(r'''
+from src.evaluation import seed_analysis as SA
+runs = SA.load_runs([W("runs", "results_yolov8s.json"), W("runs", "results_rtdetr.json")])
+expected = [(m + ".pt", d, s) for m in CFG["models"] for d in CFG["datasets"] for s in CFG["seeds"]]
+done = {(r["model"], r["dataset"], r["seed"]) for r in runs if (r.get("encoding") or "baseline") == "baseline"}
+print(f"detector runs complete: {sum(e in done for e in expected)} of {len(expected)} "
+      f"({len(CFG['models'])} models x {len(CFG['datasets'])} datasets x {len(CFG['seeds'])} seeds)")
+missing = [e for e in expected if e not in done]
+if missing:
+    print("missing:", ", ".join(f"{m.replace('.pt','')}/{d}/s{s}" for m, d, s in missing[:15]),
+          "..." if len(missing) > 15 else "")
+if runs:
+    t = []
+    for metric in ("test_mAP50", "test_mAP50_95"):
+        for r in SA.summarise(runs, metric):
+            t.append(dict(metric=metric, model=r["model"], dataset=r["dataset"], encoding=r["encoding"],
+                          n_seeds=r["n_seeds"], mean=r["mean"], sd=r["std"]))
+    acc = pd.DataFrame(t)
+    display(acc.pivot_table(index=["model", "dataset", "encoding"], columns="metric", values=["mean", "sd", "n_seeds"]).round(4))
+    neu = acc[(acc.dataset == "neu") & (acc.metric == "test_mAP50")]
+    lit = pd.DataFrame([dict(method="DSAT (Sci. Reports 2025)", mAP50=0.8314), dict(method="SH-DETR (PLOS One 2025)", mAP50=0.8303)]
+                       + [dict(method=f"this work ({r.model}, {r.n_seeds} seed(s))", mAP50=r["mean"]) for _, r in neu.iterrows()])
+    print("\nNEU-DET in context (not the claim):"); display(lit)
+else:
+    pending("trained detectors (runs/results_*.json)", r"vqaenv\Scripts\python.exe scripts\run_pipeline.py --wait-for-gpu")
+''')
 
-This audit makes those distinctions explicit for every cached detector split:
+md(r'''
+### 6.1 · CRC on the full calibration pool, both escape events - **MEASURED**
 
-* a Wilson 95% interval describes uncertainty in the *held-out measurement*;
-  it is not a second certificate;
-* calibration-bootstrap threshold quantiles measure sensitivity to which
-  defective images happened to enter calibration; refusals stay refusals;
-* IoU = 0.30 / 0.50 / 0.75 exposes whether the conclusion depends on a lenient
-  localisation definition;
-* review burden and clean-review rate report the production cost of safety.
+The oracle row of every sweep: CRC with all real defective calibration images, 200 re-splits of the
+held-out defective images. Refusals count as escape 0 (the batch goes to review) and are never dropped.
+''')
+co(r'''
+p = W("runs", "risk_results.json")
+if os.path.exists(p):
+    risk = read_json(p); rows = []
+    for tag, v in sorted(risk.items()):
+        for kind, kv in v.get("kinds", {}).items():
+            for a, e in kv["repeated"].items():
+                rows.append(dict(detector=tag, kind=kind, alpha=float(a), m=kv["n_cal_defective"],
+                                 floor=round(kv["alpha_floor"], 4), mean_escape=round(e["mean_escape_test"], 4),
+                                 se=round(e["se"], 4), refusal=round(e["refusal_rate"], 3), holds=e["holds"]))
+    if rows:
+        RK = pd.DataFrame(rows); display(RK)
+        print(f"guarantee holds (mean <= alpha + 3 SE) on {int(RK.holds.sum())}/{len(RK)} operating points")
+    else:
+        print("risk_results.json predates the two-event format - rerun: scripts\\run_pipeline.py --skip-train")
+else:
+    pending("runs/risk_results.json", r"vqaenv\Scripts\python.exe scripts\run_pipeline.py --skip-train")
+''')
 
-Together these form a reproducible reporting protocol, rather than a single
-favourable operating point.""")
-co('''from src.evaluation.rigor import audit_prediction_directory
+# =============================================================== Stage 1
+md(r'''
+## 7 · Stage 1 - best case and the go / no-go gate (Sections 12, 15) - RQ1
 
-audit_path = get_path("runs/rigor_metrics.json")
-if not os.path.exists(audit_path):
-    audit_prediction_directory(get_path("runs/preds"), audit_path, n_boot=400)
-audit = json.load(open(audit_path, encoding="utf-8"))
+Held-out real GC10 defects play the synthetic role, so the synthetic data is as good as it can ever
+be. **Decision rule** (`scripts/run_stage1.py`, fixed before looking at results): GO if, at some
+m in {5, 10, 15, 25}, SPERC run with Tier N = target (a) issues in >= 80% of draws, (b) keeps mean
+escape <= target + 3 SE, (c) has a Tier H cap within a plant tolerance `alpha_max` and (d) sends
+fewer parts to review than CRC at the same m by more than 2 paired SE. NO-GO = write the fallback
+paper (Section 14).
+''')
+co(r'''
+def show_stage1(folder, title):
+    p = os.path.join(folder, "stage1_verdict.json")
+    if not os.path.exists(p):
+        return False
+    v = read_json(p)
+    display(Markdown(f"**{title}: {v['verdict']}** - detector `{v['detector']}`, {v['n_draws']} draws, "
+                     f"target {v['target']}, alpha_max in {v['alpha_max_values']} (predictions: `{v['preds_dir']}`)"))
+    ev = pd.DataFrame([dict(key=k, **e) for k, x in v["per_dataset"].items() for e in x["evidence"]])
+    if len(ev):
+        best = ev.sort_values(["passes", "review_gain_vs_crc"], ascending=False).groupby("key").head(4)
+        display(best[["key", "m", "beta", "alpha_max", "tier_h_cap", "issued", "escape", "review_sperc",
+                      "review_gain_vs_crc", "gain_se", "passes"]].round(4))
+    c3 = pd.DataFrame([dict(key=k, **e) for k, x in v["per_dataset"].items() for e in x["c3_same_hard_bound"]])
+    if len(c3):
+        print("C3 - against CRC run AT SPERC's Tier H cap (same hard guarantee, no operating target):")
+        display(c3.round(4).head(8))
+    return True
 
-rows = []
-for tag, pair in audit["pairs"].items():
-    for iou, block in pair["results"].items():
-        for alpha, r in block["targets"].items():
-            if not r["issued"]: continue
-            st = r["threshold_stability"]
-            rows.append(dict(dataset=tag.replace("_yolov8s", ""), iou=float(iou),
-                             alpha=float(alpha), threshold=round(r["threshold"], 4),
-                             escape=round(r["escape_risk"], 4),
-                             escape_95=f"[{r['escape_wilson95_low']:.3f}, {r['escape_wilson95_high']:.3f}]",
-                             review_pct=round(100*r["review_burden"], 1),
-                             clean_review_pct=(None if r["clean_review_rate"] is None else
-                                               round(100*r["clean_review_rate"], 1)),
-                             boot_issue_pct=round(100*st["issue_rate"], 1),
-                             boot_threshold_95=(None if st["threshold_q025"] is None else
-                                                f"[{st['threshold_q025']:.3f}, {st['threshold_q975']:.3f}]")))
-df_audit = pd.DataFrame(rows)
-display(df_audit)
+if not show_stage1(W("runs", "stage1"), "Stage 1 verdict"):
+    pending("the Stage 1 verdict on the new detectors", r"vqaenv\Scripts\python.exe scripts\run_pipeline.py --skip-train")
+if show_stage1(W("runs", "stage1_v1preview"), "PREVIEW on the first-study detectors (old splits, not certified)"):
+    print("The preview uses detectors whose checkpoints were selected on the calibration images;",
+          "it is a signal, not a result.")
+''')
 
-if len(df_audit):
-    fig, ax = plt.subplots(figsize=(7.6, 3.6))
-    for d, g in df_audit[df_audit.iou == 0.5].groupby("dataset"):
-        ax.plot(g.alpha, g.review_pct, "o-", lw=1.5, ms=4, label=d)
-    ax.set_xlabel("certified escape budget alpha")
-    ax.set_ylabel("parts routed to review / reject (%)")
-    ax.set_title("Safety–workflow frontier at IoU = 0.50")
-    ax.legend(fontsize=7, ncol=2); fig.tight_layout(); plt.show()
+# =============================================================== Stage 2
+md(r'''
+## 8 · Stage 2 - MVTec AD bridge (Sections 9, 12)
 
-print("Interpretation: intervals and bootstrap summaries are empirical diagnostics;")
-print("only the pre-specified CRC procedure supplies the distribution-free guarantee.")''')
+SPI's native setting is one score per image. Image-level PatchCore anomaly scores (memory bank from
+`train/good` only) play the role of escape scores; stop rule: the transporter must behave as SPI
+reports on its own kind of score.
+''')
+co(r'''
+p = W("runs", "mvtec", "bridge_summary.json")
+if os.path.exists(p):
+    v = read_json(p)
+    display(pd.DataFrame(v["categories"]).T)
+    print(f"hard-bound violations: {v['hard_bound_violations']}; aligned rows inside Tier N: {v['aligned_inside_tier_n']};",
+          "STAGE 2", "PASSED" if v["passes"] else "NEEDS A LOOK")
+else:
+    pending("the MVTec AD bridge (download MVTec AD to data/raw/MVTEC-AD first)",
+            r"vqaenv\Scripts\python.exe scripts\run_mvtec_bridge.py")
+''')
 
-# ---------------------------------------------------------------- localization-robust certificate
-md(r"""## 3.6 · Localization-robust certificate — **VALIDATED CONSTRUCTION**
+# =============================================================== Stage 4
+md(r'''
+## 9 · Stage 4 - the headline: protocol P1 on the primary datasets (Sections 9.2, 12) - RQ1
 
-IoU = 0.50 is a convention, not a physical law. A detector can clear a defect
-with a loose overlap while failing to localise it tightly enough for an operator
-to find it. Reporting a good certificate at one chosen IoU is therefore not
-enough.
-
-**Localization-Robust CRC (LR-CRC)** uses one deployed score threshold for a
-pre-specified family of IoUs. CRC first finds a safe threshold at each IoU, then
-deploys their minimum. Since lowering a detection-score threshold can only
-*reduce* escape loss, that shared threshold inherits every individual CRC
-guarantee. If any IoU refuses, LR-CRC refuses rather than quietly dropping the
-hard localisation requirement.
-
-This is deliberately a small, transparent extension: it adds no learned
-parameters, no post-hoc selection, and no unproved synthetic-data assumption.
-Its value is making localisation strictness part of the safety certificate.""")
-co('''from src.risk.conformal import localization_robust_risk_control
-from src.risk.spi import escape_confidences, empirical_risk
-
-ROBUST_IOUS = (0.30, 0.50, 0.75)   # fixed before examining results
-rows = []
-for d in DATASETS:
-    cp, tp = get_path(f"runs/preds/{d}_yolov8s_cal.json"), get_path(f"runs/preds/{d}_yolov8s_test.json")
-    if not (os.path.exists(cp) and os.path.exists(tp)): continue
-    cal = json.load(open(cp, encoding="utf-8"))["records"]
-    tst = json.load(open(tp, encoding="utf-8"))["records"]
-    for alpha in (0.10, 0.20):
-        robust = localization_robust_risk_control(cal, escape_threshold_grid(201), alpha, ROBUST_IOUS)
-        row = dict(dataset=d, alpha=alpha, status=("issued" if robust["issued"] else "refused"),
-                   shared_threshold=(round(robust["threshold"], 4) if robust["issued"] else None))
-        if robust["issued"]:
-            for q in ROBUST_IOUS:
-                row[f"test escape @ IoU {q:.2f}"] = round(
-                    empirical_risk(escape_confidences(tst, q), robust["threshold"]), 4)
-        else:
-            refused = [q for q, v in robust["per_iou"].items() if not v["issued"]]
-            row["blocking IoU(s)"] = ", ".join(refused)
-        rows.append(row)
-df_robust = pd.DataFrame(rows)
-display(df_robust)
-print("A refusal at IoU=0.75 is a useful result: with this detector and calibration")
-print("set, a tight-localisation safety claim cannot honestly be issued yet.")''')
-
-# ---------------------------------------------------------------- the constraint
-md("""## 4 · The binding constraint — **MEASURED**
-
-This is the observation the rest of the project is built on, and it was found by
-measuring rather than by reasoning.
-
-The conformal penalty is `B/(n+1)` where `n` counts calibration points on which
-the loss is **defined** — i.e. *defective* images. A clean part contributes an
-identically-zero row and buys nothing. So the tightness of an escape guarantee is
-governed by how many labelled **defects** you hold, not how many labelled parts.""")
-co('''rows = []
-for d in DATASETS:
-    p = get_path(f"runs/preds/{d}_yolov8s_cal.json")
-    if not os.path.exists(p): continue
-    recs = json.load(open(p, encoding="utf-8"))["records"]
-    pos = sum(1 for r in recs if r["gt_boxes"])
-    rows.append(dict(dataset=d, cal_images=len(recs), defective=pos,
-                     alpha_floor=round(1.0 / (pos + 1), 4),
-                     can_certify_1pct=bool(1.0 / (pos + 1) < 0.01)))
-df_floor = pd.DataFrame(rows)
-if len(df_floor) > 0:
-    df_floor = df_floor.sort_values("alpha_floor", ascending=False)
-    print(df_floor.to_string(index=False))
-    print("\\nNo detector, however good, can certify an alpha below its own floor.")
-    print("The two datasets that carry the triage argument have the WORST floors,")
-    print("because their defects are rare - which is also what makes them realistic.")
-
-    fig, ax = plt.subplots(figsize=(7, 3.4))
-    ax.bar(df_floor.dataset, df_floor.alpha_floor, color=F.OKABE[0])
-    ax.axhline(0.01, color=F.OKABE[1], ls="--", lw=1.4, label="alpha = 0.01 target")
-    ax.set_ylabel("alpha floor  =  1/(n_def+1)"); ax.legend()
-    ax.set_title("Smallest certifiable escape rate, set purely by labelled-defect count")
+Real defective calibration images subsampled to m in {5, 10, 15, 25, 40, full}, 500 draws each,
+every draw re-splitting the held-out images; all methods on the same draws. Shown: the headline
+detector, part escape, the best available synthetic source, beta = 0.05, mean over seeds (error
+bars = sd across seeds).
+''')
+co(r'''
+SUM = W("runs", "coldstart", "summary")
+PREVIEW = False
+if not os.path.exists(os.path.join(SUM, "seeds_summary.csv")) and \
+        os.path.exists(W("runs", "coldstart_v1preview", "summary", "seeds_summary.csv")):
+    SUM, PREVIEW = W("runs", "coldstart_v1preview", "summary"), True
+    display(Markdown("**PREVIEW** - no sweep on the retrained detectors yet, so Sections 9-12 show the sweep "
+                     "on the *first-study* detectors (YOLOv8s, seed 0, old splits: checkpoints were selected "
+                     "on the calibration images). A signal, not a result; the real run replaces it."))
+SS = pd.read_csv(os.path.join(SUM, "seeds_summary.csv")) if os.path.exists(os.path.join(SUM, "seeds_summary.csv")) else None
+if SS is None:
+    pending("the cold-start sweep summary", r"vqaenv\Scripts\python.exe scripts\run_pipeline.py --skip-train")
+else:
+    head = CFG.get("headline_model", "rtdetr-l")
+    model = head if head in set(SS.model) else sorted(SS.model.unique())[0]
+    pref = ["training_free", "anomalydiffusion", "copy_paste", "real_as_synthetic"]
+    fig, axes = plt.subplots(len(CFG["primary_datasets"]), 2, figsize=(11, 3.4 * len(CFG["primary_datasets"])), squeeze=False)
+    for i, d in enumerate(CFG["primary_datasets"]):
+        sub = SS[(SS.model == model) & (SS.dataset == d) & (SS.kind == "part")]
+        src = next((s for s in pref if s in set(sub.source)), None)
+        if src is None:
+            axes[i, 0].set_title(f"{d}: no sweep yet"); continue
+        sub = sub[sub.source == src]
+        full = sub[sub.method == "crc"].m.max()
+        for meth in ("crc", "sperc_tierN", "sperc_nominal", "acq_uncorrected"):
+            g = sub[(sub.method == meth) & ((sub.beta.isna()) | (sub.beta == 0.05)) & (sub.m < full)].sort_values("m")
+            if not len(g):
+                continue
+            for j, col in enumerate(("escape_mean", "review_mean")):
+                axes[i, j].errorbar(g.m, g[col], yerr=g[col.replace("_mean", "_sd_seeds")].fillna(0),
+                                    color=METHOD_COLOR[meth], marker="o", ms=4, lw=1.6, capsize=2, label=METHOD_LABEL[meth])
+        orc = sub[(sub.method == "crc") & (sub.m == full)]
+        for j, col in enumerate(("escape_mean", "review_mean")):
+            if len(orc):
+                axes[i, j].axhline(float(orc[col].iloc[0]), color="0.3", ls=":", lw=1.2, label=f"oracle: CRC, all {int(full)} defects")
+            axes[i, j].set_xticks([5, 10, 15, 25, 40])
+            axes[i, j].set_xlabel("real defects m")
+        axes[i, 0].axhline(CFG["certificate"]["target_escape"], color=OK[1], ls="--", lw=1)
+        axes[i, 0].set_ylabel("realised escape"); axes[i, 1].set_ylabel("review load")
+        axes[i, 0].set_title(f"{d} ({model}, source: {src})" + (" - PREVIEW" if PREVIEW else ""), loc="left")
+        if i == 0:
+            axes[i, 1].legend(fontsize=7)
     fig.tight_layout(); plt.show()
+    print("Refusals count as escape 0 / review 1. Seeds per point:", int(SS.n_seeds.max()),
+          "- draws per seed:", int(SS.draws_per_seed.median()))
+''')
+co(r'''
+p = os.path.join(SUM, "mstar_summary.csv")
+if os.path.exists(p):
+    MS = pd.read_csv(p)
+    show = MS[(MS.kind == "part") & MS.method.isin(["crc", "sperc_tierN", "sperc_nominal", "acq_uncorrected"])
+              & (MS.beta.isna() | (MS.beta == 0.05))]
+    piv = show.pivot_table(index=["model", "dataset", "source", "alpha_max"], columns="method",
+                           values="m_star_mean", aggfunc="first")
+    print("m-star: real defects needed to reach the full-data operating point (mean over seeds; empty = not reached).")
+    print("SPERC must also have a Tier H cap <= alpha_max; acquisition and naive pooling carry no valid guarantee.")
+    display(piv)
 else:
-    print("WARNING: runs/preds/*_cal.json not found.")''')
+    pending("the m-star table", r"vqaenv\Scripts\python.exe scripts\run_pipeline.py --skip-train")
+''')
 
+# =============================================================== Stage 5
+md(r'''
+## 10 · Stage 5 - misalignment stress and validity (Sections 8.3, 12) - RQ2
 
-# ---------------------------------------------------------------- training
-md("""## 5 · Training — optional, needs a GPU
-
-`TRAIN = False` by default so Run All finishes in about a minute on the cached
-artefacts. Flip it to `True` to regenerate the detectors from raw data.
-
-Training is **idempotent**: any (dataset, model, encoding, seed) already present
-in `runs/results_*.json` is skipped, so an interrupted sweep resumes where it
-stopped rather than starting over. That matters here - this sweep has been
-interrupted twice by other work taking the GPU.
-
-A run that is killed part-way is **refused, not recorded**. An earlier version
-wrote truncated runs into the results file where they were indistinguishable
-from converged ones, and two of them (5/120 and 2/100 epochs) dragged the CCE
-ablation mean down by 18pp before being caught.""")
-co('''TRAIN = True               # <-- True to retrain (hours, needs a free GPU)
-TRAIN_DATASETS = "neu,magnetic_tile,kolektor"   # the three that carry the argument
-TRAIN_SEEDS = "0,1,2"
-
-if not TRAIN:
-    print("TRAIN = False -> using cached detector results in runs/")
-    print("set TRAIN = True to regenerate. Full sweep at 3 seeds is ~18.7 h;")
-    print("adding gc10 and pcb would add ~27.8 h more, which is why they stay")
-    print("at one seed as replication only.")
-else:
-    import subprocess
-    for enc, ydir in (("baseline", "data/yolo"), ("cce", "data/yolo_cce")):
-        for seed in TRAIN_SEEDS.split(","):
-            print()
-            print(f">>> yolov8s / {enc} / seed {seed}")
-            subprocess.call([sys.executable, "-m", "src.evaluation.train_baselines",
-                             "--model", "yolov8s.pt", "--encoding", enc,
-                             "--yolo_dir", ydir, "--datasets", TRAIN_DATASETS,
-                             "--seeds", seed, "--results", "runs/results_yolov8s.json"])
-    print("training sweep complete")''')
-
-md("""### Detector accuracy across seeds
-
-Reported as mean +/- std where more than one seed exists, and marked `(1 seed)`
-where it does not. The CCE arms are **paired** by seed - same initialisation,
-same data order - so the ablation compares per-seed differences rather than
-group means, which would otherwise be inflated by between-seed noise that
-cancels exactly.
-
-At three seeds the Wilcoxon signed-rank test cannot reach p < 0.05 whatever the
-effect size: its smallest attainable two-sided p at n=3 is **0.25**. The cell
-prints that floor rather than quoting a p-value as if it carried more weight
-than it does.""")
-co('''from src.evaluation import seed_analysis as SA
-
-runs = SA.load_runs([get_path("runs/results_yolov8s.json"),
-                     get_path("runs/results_rtdetr.json")])
-print(f"{len(runs)} valid runs (interrupted runs are refused at record time)")
-print()
-
-summ = pd.DataFrame(SA.summarise(runs))
-if len(summ):
-    print(summ[["model", "dataset", "encoding", "n_seeds", "mean", "std"]].to_string(index=False))
-
-pairs = SA.paired_ablation(runs)
-print()
-print("PAIRED CCE ABLATION")
-if not pairs:
-    print("  no dataset yet has both arms at a shared seed")
-else:
-    print(pd.DataFrame(pairs).to_string(index=False))
-    pe = SA.pooled_effect(pairs)
-    print()
-    print(f"\n  pooled {pe['pooled_diff_pp']:+.2f}pp over {pe['n_datasets']} dataset(s) "
-          f"-> {pe['verdict']}")
-
-# literature context - the detector is NOT the contribution, but the gap is real
-lit = pd.DataFrame([
-    dict(method="DSAT (Sci.Reports 2025)", dataset="neu", mAP50=0.8314),
-    dict(method="SH-DETR (PLOS One 2025)", dataset="neu", mAP50=0.8303),
-    dict(method="HCT-Det (Sensors 2025)",  dataset="neu", mAP50=0.7950),
-])
-ours = summ[(summ.dataset == "neu")].sort_values("mean", ascending=False) if len(summ) else summ
-if len(ours):
-    lit = pd.concat([lit, pd.DataFrame([dict(method=f"this work ({ours.iloc[0].model})",
-                                             dataset="neu", mAP50=float(ours.iloc[0]["mean"]))])])
-print()
-print("NEU-DET in context (detection accuracy is not this project's claim):")
-print(lit.to_string(index=False))
-
-if len(summ) and summ.n_seeds.max() > 1:
-    g = summ[summ.n_seeds > 1]
-    fig, ax = plt.subplots(figsize=(7.5, 3.6))
-    x = np.arange(len(g))
-    ax.bar(x, g["mean"], yerr=g["std"].fillna(0), capsize=4, color=F.OKABE[0])
-    ax.set_xticks(x)
-    ax.set_xticklabels([f"{r.dataset} {r.encoding}" for _, r in g.iterrows()], fontsize=7)
-    ax.set_ylabel("mAP@0.5"); ax.set_title("Detector accuracy, mean +/- std across seeds")
+Uniform-noise scores, another line's real defects, and an under-trained generator checkpoint play
+the synthetic role. Stop rule: realised escape above Tier H beyond sampling error = the claim fails.
+Every row that carries a hard bound (SPERC's Tier H; CRC's alpha) is plotted against it; points must
+lie on or below the diagonal. With ~1000 rows a per-row 3-SE flag fires about once by chance, so the
+verdict uses a one-sided test per row with a Holm correction over all of them.
+''')
+co(r'''
+p = os.path.join(SUM, "validity.csv")
+if os.path.exists(p):
+    V = pd.read_csv(p)
+    fig, ax = plt.subplots(figsize=(6.2, 5))
+    for role, col, mk in (("best_case", OK[2], "o"), ("generator", OK[0], "s"), ("stress", OK[1], "^")):
+        g = V[V.source_role == role]
+        if len(g):
+            ax.errorbar(g.tier_h_cap, g.escape, yerr=3 * g.escape_se, fmt=mk, color=col, ms=4, lw=.6, alpha=.75,
+                        label=f"{role} ({len(g)})")
+    lim = [0, max(0.05, float(V.tier_h_cap.max()) * 1.05)]
+    ax.plot(lim, lim, color="0.2", ls="--", lw=1, label="escape = Tier H cap")
+    ax.set_xlabel("Tier H cap"); ax.set_ylabel("realised escape (+/- 3 SE)"); ax.legend(fontsize=8)
+    ax.set_title("RQ2: realised escape against its hard cap" + (" (PREVIEW)" if PREVIEW else ""), loc="left")
     fig.tight_layout(); plt.show()
+    n3 = int(V.exceeds_hard_bound.fillna(False).astype(bool).sum())
+    nh = int(V.get("holm_violation", pd.Series(False, index=V.index)).fillna(False).astype(bool).sum())
+    print(f"{len(V)} rows carry a hard bound ({int((V.source_role == 'stress').sum())} from stress sources).")
+    print(f"rows above their cap by > 3 SE: {n3} (about {len(V) * 0.00135:.1f} expected by chance at this many rows)")
+    print(f"significant violations after Holm correction (family-wise 0.05): {nh} ->",
+          "claim HOLDS" if nh == 0 else "CLAIM FAILS - investigate")
 else:
-    print()
-    print("(no configuration has >1 seed yet, so no error bars to plot)")''')
+    pending("the validity table", r"vqaenv\Scripts\python.exe scripts\run_pipeline.py --skip-train")
+''')
 
-# ---------------------------------------------------------------- acquisition
-md("""## 5 · Defect-seeking acquisition — **MEASURED**, including where it fails
+# =============================================================== RQ3
+md(r'''
+## 11 · RQ3 - does a better generator buy certification with fewer real defects? (Section 6, C4)
 
-If the certificate is bought with labelled defects, then *which parts you pay to
-label* is a decision with a measurable objective. On a line that is ~89% clean, a
-random labelling budget buys mostly zeros.
-
-Four results, and the fourth is the one that matters most.""")
-co('''# MEASURED 1+2: does screening buy defects faster, and does it change whether
-# a certificate can be issued at all?
-def pool(d):
-    cal_p = get_path(f"runs/preds/{d}_yolov8s_cal.json")
-    tst_p = get_path(f"runs/preds/{d}_yolov8s_test.json")
-    cal = json.load(open(cal_p, encoding="utf-8"))["records"]
-    tst = json.load(open(tst_p, encoding="utf-8"))["records"]
-    s = np.array([max(r["pred_scores"]) if r["pred_scores"] else 0.0 for r in cal])
-    c = np.array([escape_confidence(r) for r in cal], float)
-    ct = np.array([escape_confidence(r) for r in tst], float); ct = ct[~np.isnan(ct)]
-    return s, c, ct
-
-rows = []
-for d in [x for x in PRIMARY if HAVE.get(x)]:
-    s, c, ct = pool(d)
-    for B in (50, 100):
-        for gamma in (0.0, 3.0):
-            nd, iss, risks = [], 0, []
-            for t in range(200):
-                idx, pr = acquire(s, B, gamma, seed=t)
-                cc = c[idx]; cc = cc[~np.isnan(cc)]
-                nd.append(cc.size)
-                if cc.size < 2: continue
-                thr = crc_threshold(cc, 0.10)          # naive, unweighted
-                if thr > NEG_INF / 2:
-                    iss += 1; risks.append(empirical_risk(ct, thr))
-            rows.append(dict(dataset=d, budget=B,
-                             policy=("random" if gamma == 0 else "defect-seeking"),
-                             defects=round(float(np.mean(nd)), 1),
-                             issued_pct=round(100 * iss / 200, 1),
-                             mean_risk=(round(float(np.mean(risks)), 4) if risks else None)))
-df_acq = pd.DataFrame(rows)
-print(df_acq.to_string(index=False))
-print()
-print("Random labelling at these budgets issues NO usable certificate.")
-print("Screening turns that into one most of the time, from the same spend -")
-print("but note mean_risk sits just ABOVE 0.10: the screen is biased.")
-
-if len(df_acq):
-    fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
-    lbl = [f"{r.dataset[:8]} B{r.budget}" for _, r in df_acq[df_acq.policy == "random"].iterrows()]
-    w = 0.38
-    for j, pol in enumerate(["random", "defect-seeking"]):
-        g = df_acq[df_acq.policy == pol]
-        axes[0].bar(np.arange(len(g)) + j * w, g.defects, w, label=pol, color=F.OKABE[j])
-        axes[1].bar(np.arange(len(g)) + j * w, g.issued_pct, w, label=pol, color=F.OKABE[j])
-    for ax, t, yl in ((axes[0], "Same budget, far more defects bought", "defects labelled"),
-                      (axes[1], "Random labelling almost never certifies", "certificate issued %")):
-        ax.set_xticks(np.arange(len(lbl)) + w / 2); ax.set_xticklabels(lbl, fontsize=7)
-        ax.set_ylabel(yl); ax.set_title(t); ax.legend(fontsize=8)
-    fig.tight_layout(); plt.show()''')
-
-md("""### Why the screen is biased, and why the textbook fix does not rescue it — **NEGATIVE**
-
-Screening on the detector score selects on the very quantity being calibrated, so
-it preferentially finds **easy** defects, which flatter the detector.
-
-The standard correction for a known sampling law is inverse-propensity weighting.
-It is implemented in `src/risk/acquisition.py` and it does not work here: weighted
-CRC charges the unobserved test point at `w_max`, and under a hard screen the
-weight ratio is large enough that `w_max` dominates both sums, so the certified
-risk never falls below `alpha` at any useful threshold.""")
-co('''# NEGATIVE: inverse-propensity correction cancels the acquisition benefit
-rows = []
-for d in [x for x in PRIMARY if HAVE.get(x)][:1]:
-    s, c, ct = pool(d)
-    for gamma, clip in [(0.0, None), (1.0, None), (3.0, None), (1.0, 5), (3.0, 5), (3.0, 20)]:
-        iss, risks = 0, []
-        for t in range(200):
-            idx, pr = acquire(s, 100, gamma, seed=t)
-            cc = c[idx]; keep = ~np.isnan(cc); cc = cc[keep]; pp = pr[keep]
-            if cc.size < 2: continue
-            w = 1.0 / pp
-            if clip is not None:
-                w = np.clip(w, w.min(), w.min() * clip)
-            thr = weighted_crc_threshold(cc, w, 0.10)
-            if thr > NEG_INF / 2:
-                iss += 1; risks.append(empirical_risk(ct, thr))
-        rows.append(dict(dataset=d, gamma=gamma, weight_clip=(clip or "none"),
-                         issued_pct=round(100 * iss / 200, 1),
-                         mean_risk=(round(float(np.mean(risks)), 4) if risks else None)))
-print(pd.DataFrame(rows).to_string(index=False))
-print("\\nThe screen buys ~5x the defects and the correction gives all of it back.")
-print("Clipping enough to issue reintroduces exactly the bias the weights removed.")
-print("\\nUNTESTED next step: stratified acquisition, whose weights are bounded by")
-print("construction rather than by 1/pi.")''')
-
-# ---------------------------------------------------------------- negatives
-md("""## 6 · Ideas that were tried and refuted — **NEGATIVE**
-
-Kept deliberately. A reader with no view of what failed has no way to calibrate
-what succeeded, and each of these is something a reviewer would otherwise ask
-about.""")
-co('''neg = pd.DataFrame([
- dict(idea="Learned nonconformity score (fuse score stats, geometry, self-agreement)",
-      outcome="REFUTED",
-      evidence="ranking improves (AUC +0.017..+0.057) but auto-accept at certified "
-               "alpha=0.10 gets WORSE on 3/4 datasets; kolektor 88.1% -> 0.7%"),
- dict(idea="CCE preprocessing (raw | CLAHE | high-frequency residual)",
-      outcome="NEUTRAL",
-      evidence="separability +23..+352% but mAP -0.76pp mean over 3 valid pairs"),
- dict(idea="Faithfulness-gated triage",
-      outcome="VACUOUS AS BUILT",
-      evidence="the optimiser selects phi=0, disabling its own gate; faithfulness "
-               "covered 5.3% of test images and was never passed into the fit"),
- dict(idea="Inverse-propensity correction for defect-seeking acquisition",
-      outcome="REFUTED",
-      evidence="never issues a certificate at any gamma or clip level (Section 5)"),
-])
-for _, r in neg.iterrows():
-    print(f"* {r.idea}\\n    -> {r.outcome}: {r.evidence}\\n")
-print("Detection accuracy is NOT the contribution: NEU sits at 0.733 mAP@0.5")
-print("against published SOTA of 0.831 (SH-DETR, PLOS One 2025).")''')
-
-# ---------------------------------------------------------------- triage + agent
-md("""## 7 · Triage and the closed-loop agent
-
-The policy a plant actually runs: route each part to auto-accept, human review or
-auto-reject under the certified threshold, watch for drift, and re-calibrate.
-
-The language model narrates certified state; it never decides. That separation is
-load-bearing rather than stylistic - a language model cannot carry a statistical
-certificate, and during development the local model got the routing logic
-backwards ("score 0.31 is below the threshold 0.12"). Disabling it changes the
-prose and not one decision.""")
-co('''from src.agentic.inspector import InspectionAgent, run_episode
-from src.agentic import llm_narrator as NARR
-
-d = "kolektor" if HAVE.get("kolektor") else next((x for x in DATASETS if HAVE.get(x)), None)
-if d is None:
-    print("no cached predictions available")
+A training-free one-shot generator vs a fine-tuned few-shot one (AnomalyDiffusion), compared by the
+real defects each saves at a fixed Tier H cap, plus an alignment diagnostic: the KS distance between
+real and synthetic escape scores. Generators: `scripts/generate_synthetic.py`; audit sheets below.
+''')
+co(r'''
+sheets = sorted(glob.glob(W("data", "generated", "*", "*", "_audit_sheet.png")))
+for s in sheets[:6]:
+    display(Markdown(f"`{os.path.relpath(s, WORK)}`")); display(Image(filename=s, width=720))
+if not sheets:
+    pending("synthetic defects", r"vqaenv\Scripts\python.exe scripts\generate_synthetic.py --dataset kolektor --generator training_free")
+p = os.path.join(SUM, "alignment_vs_mstar.csv")
+if os.path.exists(p):
+    A = pd.read_csv(p)
+    display(A[A.kind == "part"].sort_values(["model", "dataset", "ks_full_pool"]).round(4))
+    s = read_json(os.path.join(SUM, "summary.json")).get("alignment_correlation", {})
+    print("Spearman(KS, m-star) per detector:", s if s else "needs >= 4 generator/stress sources per detector")
 else:
-    cal_p = get_path(f"runs/preds/{d}_yolov8s_cal.json")
-    tst_p = get_path(f"runs/preds/{d}_yolov8s_test.json")
-    cal = json.load(open(cal_p, encoding="utf-8"))["records"]
-    tst = json.load(open(tst_p, encoding="utf-8"))["records"]
-    ag = InspectionAgent(cal, alpha=0.10, drift_window=150)
-    print(f"[{d}] calibrated lambda_lo={ag.state.lam:.4f} lambda_hi={ag.lam_hi:.4f} "
-          f"certified={ag.state.certified}")
-    run_episode(ag, tst)
-    st = ag.state.as_dict()
-    print(f"  parts={st['n_parts']}  accept={st['n_accept']}  review={st['n_review']}  "
-          f"reject={st['n_reject']}")
-    print(f"  escape_rate={st['escape_rate']:.4f} (alpha=0.10)   review_load={st['review_load']:.4f}")
+    pending("the alignment table", r"vqaenv\Scripts\python.exe scripts\run_pipeline.py --skip-train")
+''')
 
-    ns = NARR.status()
-    print(f"\\nLLM backend: {ns['selected_model'] or 'none'}  (mode={ns['mode']})")
-    rep = NARR.shift_report(dict(dataset=d, alpha=0.10, n_parts=st["n_parts"],
-                                 auto_accept=st["n_accept"], human_review=st["n_review"],
-                                 auto_reject=st["n_reject"], escapes=st["n_escapes"],
-                                 drift_alarms=st["drift_alarms"],
-                                 recalibrations=st["recalibrations"]))
-    print(f"--- shift report (llm={rep['llm']}) ---")
-    print(rep["text"])''')
+# =============================================================== RQ4
+md(r'''
+## 12 · RQ4 - planned vs realised caps (Section 8.4)
 
-# ---------------------------------------------------------------- limits
-md("""## 8 · Limitations, stated plainly
+The commissioning table promises a cap before data exist; the sweep measures escape afterwards. They
+must agree: the worst realised escape (any source) never above the cap beyond sampling error.
+''')
+co(r'''
+p = os.path.join(SUM, "planned_vs_realised.csv")
+if os.path.exists(p):
+    PV = pd.read_csv(p)
+    display(PV[PV.kind == "part"].round(4))
+    print(f"disagreements: {int((~PV.agree.astype(bool)).sum())} of {len(PV)} "
+          "(planned = the Tier H formula at each source's own N, computed before any score is seen;"
+          " realised = the worst mean escape across sources)")
+else:
+    pending("planned-vs-realised caps", r"vqaenv\Scripts\python.exe scripts\run_pipeline.py --skip-train")
+''')
 
-1. **Single seed.** 12/12 detector configurations were trained once. The audit
-   reports split and calibration uncertainty, but it cannot replace retraining
-   each detector across seeds; this is still the first major GPU-time priority.
-2. **Detection accuracy trails SOTA.** 0.733 vs 0.831 mAP@0.5 on NEU. The claim
-   is denominated in labelling effort, not mAP, but the gap must be reported.
-3. **Drift is synthetic.** Covariate shift is induced by biasing the test block,
-   not observed on a real line over time.
-4. **Acquisition bias is unresolved.** Defect-seeking works and is biased;
-   inverse-propensity correction is unusable. Stratified acquisition is the next
-   candidate and is untested.
-5. **SPI reconstruction failed.** `src/risk/spi.py` contains a working reduction
-   and a *non-working* reconstruction of the Bashari et al. transporter - the
-   window equations could not be retrieved. It is present for the reduction, not
-   as a validated method.
-6. **Five datasets, two roles.** Only Magnetic-Tile and KolektorSDD2 can measure
-   review economics; treating all five as equivalent would be wrong.""")
-co('''print("Artefacts this notebook reads:")
-for p in ["runs/risk_results.json", "runs/triage_results.json",
-          "runs/results_yolov8s.json", "runs/results_rtdetr.json"]:
-    resolved = get_path(p)
-    print(f"  {'OK ' if os.path.exists(resolved) else '-- '} {p}")
-print(f"\\nprediction caches: {sum(HAVE.values())}/{len(DATASETS)} datasets")
-print("\\nTo regenerate everything from raw data:  python scripts/run_pipeline.py")''')
+# =============================================================== Stage 6
+md(r'''
+## 13 · Stage 6 - protocol P2, full cold start (Sections 9.2, 12)
+
+The detector itself is trained on only k = 5 real defects plus synthetic defects plus all clean
+images; calibration on m disjoint real defects; a disjoint half of the synthetic set, never seen by
+the P2 detector, is SPERC's synthetic calibration data. Reported whatever it shows.
+''')
+co(r'''
+p = W("runs", "coldstart_p2", "summary", "seeds_summary.csv")
+if os.path.exists(p):
+    P2 = pd.read_csv(p)
+    sel = P2[(P2.kind == "part") & P2.method.isin(["crc", "sperc_tierN", "sperc_nominal"]) & (P2.beta.isna() | (P2.beta == 0.05))]
+    display(sel.pivot_table(index=["model", "dataset", "source", "m"], columns="method",
+                            values=["escape_mean", "review_mean"], aggfunc="first").round(3))
+else:
+    pending("protocol P2", r"vqaenv\Scripts\python.exe scripts\run_pipeline.py --skip-train --p2")
+''')
+
+# =============================================================== baselines
+md(r'''
+## 14 · Baselines (Section 12.1)
+
+1. CRC, real only; 2. naive stacking of real + synthetic (invalid); 3. the old `spi.py` heuristic
+(never beats CRC); 4. defect-seeking acquisition without correction (biased); 5. oracle CRC on the
+full pool; 6. SPERC with beta in {0.05, 0.10, 0.20} and both generators. The table shows, at m = 15,
+every method's escape, review load and the parts labelled to obtain the m defects.
+''')
+co(r'''
+if SS is not None:
+    b = SS[(SS.kind == "part") & (SS.m == 15)]
+    if len(b):
+        cols = ["model", "dataset", "source", "method", "beta", "n_seeds", "issued_mean", "escape_mean", "review_mean", "tier_h_cap"]
+        display(b[cols].sort_values(["model", "dataset", "source", "method", "beta"]).round(3).head(60))
+    raw = sorted(glob.glob(W("runs", "coldstart", "coldstart_*.json")))
+    if raw:
+        rr = pd.DataFrame(read_json(raw[0]))
+        lab = rr[(rr.method.isin(["crc", "acq_uncorrected"])) & (rr.kind == "part")].pivot_table(
+            index=["dataset", "m"], columns="method", values="labelled_parts", aggfunc="mean")
+        print(f"parts labelled to obtain m defects ({os.path.basename(raw[0])}): random vs defect-seeking")
+        display(lab.round(1))
+else:
+    pending("the baseline comparison", r"vqaenv\Scripts\python.exe scripts\run_pipeline.py --skip-train")
+''')
+
+# =============================================================== established
+md(r'''
+## 15 · Already established (Section 13.1) and the drift controller
+
+Results measured in the first study (old splits) are quoted as context; the simulation-based ones
+are recomputed here.
+''')
+co(r'''
+display(pd.DataFrame([
+    ("Escape scalar reduction holds", "CRC on the reduced score: 0.032 / 0.082 / 0.179 at alpha 0.05 / 0.10 / 0.20, 600 trials", "recomputed in Section 1"),
+    ("CRC leaves budget unused at small m", "m = 25: refuses at 0.05; 40% of budget at 0.10, 77% at 0.20", "Section 1.1 (theory)"),
+    ("Alpha floors are set by defective counts", "KolektorSDD2 0.0185 (53), Magnetic-Tile 0.0167 (59)", "Section 5 (new splits)"),
+    ("Defect-seeking acquisition buys certificates", "KolektorSDD2, budget 100: 0% random vs ~83% guided; realised 0.1011 vs 0.10", "baseline 4 in every sweep"),
+    ("Three bias corrections fail for one reason", "inverse-propensity 0%, stratified 6.0% best valid, deflated alpha cliff to 0%", "experiments/ACQUISITION_frontier.md"),
+    ("Learned nonconformity score does not help", "KolektorSDD2 auto-accept 88.1% -> 0.7%", "experiments/NEGATIVE_learned_nonconformity.md"),
+    ("Drift controller", "holds 0.1007 after a regime shift where a static threshold reaches 0.9618", "recomputed below"),
+], columns=["result", "evidence (first study)", "where"]).set_index("result"))
+''')
+co(r'''
+# VALIDATED: drift controller vs a static threshold on a simulated regime shift
+from src.risk.adaptive import run_adaptive_experiment, simulated_line_loss
+sched = lambda t: 1.0 if t < 1500 else 0.45                      # detector quality drops at t = 1500
+res = run_adaptive_experiment(simulated_line_loss(sched), 4000, alpha=0.10, gamma=0.02, seed=0)
+static_lam = res["lambdas"][1499]
+rng = np.random.default_rng(1); f = simulated_line_loss(sched)
+static = np.array([f(t, static_lam, rng) for t in range(4000)])
+after = slice(2000, 4000)
+print(f"after the shift: adaptive escape {res['losses'][after].mean():.4f} vs static threshold {static[after].mean():.4f} (target 0.10)")
+fig, ax = plt.subplots(figsize=(8, 3))
+k = 200; sm = lambda x: np.convolve(x, np.ones(k) / k, mode="valid")     # trailing window
+xs = np.arange(k - 1, 4000)                                                # plotted at the window's end
+ax.plot(xs, sm(res["losses"]), color=OK[0], lw=1.6, label="adaptive controller")
+ax.plot(xs, sm(static), color=OK[1], lw=1.6, label="static threshold")
+ax.axhline(0.10, color="0.3", ls="--", lw=1); ax.axvline(1500, color="0.6", lw=1)
+ax.set_xlabel("part"); ax.set_ylabel(f"escape ({k}-part moving mean)"); ax.legend(fontsize=8)
+ax.set_title("Exchangeability breaks on a real line: the drift monitor, not SPERC, handles it", loc="left")
+fig.tight_layout(); plt.show()
+''')
+
+# =============================================================== use it
+md(r'''
+## 16 · Reading a certificate (for a plant)
+''')
+co(r'''
+rng = np.random.default_rng(3)
+c_real, c_syn = rng.beta(5, 2, 15), rng.beta(5, 2, 1000)          # replace with escape_scores(...)
+cert = certify_sperc(c_real, c_syn, alpha=0.05, beta=0.05, alpha_max=0.25)
+print(f"issued       : {cert.issued}   (False = refuse: every part goes to review)")
+print(f"threshold    : {cert.threshold:.4f}   (auto-accept a part only if its highest detection score is below this)")
+print(f"Tier N bound : {cert.tier_n_bound:.2f}   (escape bound when synthetic defects resemble real ones, + eps)")
+print(f"Tier H cap   : {cert.tier_h_cap:.4f}   (escape bound that holds no matter what)")
+print("Both bounds average over the calibration draw; neither is a per-part promise; drift is the monitor's job.")
+''')
+
+# =============================================================== status
+md(r'''
+## 17 · Status against the document (Section 13.2) and limitations (Section 14)
+
+The checklist below is computed from the repository, not typed.
+''')
+co(r'''
+def has(path, text=None, absent=None):
+    p = R(path)
+    if not os.path.exists(p):
+        return False
+    s = open(p, encoding="utf-8", errors="ignore").read()
+    return (text is None or text in s) and (absent is None or absent not in s)
+n_tests = sum(open(f, encoding="utf-8").read().count("\ndef test_") for f in glob.glob(R("tests", "test_*.py")))
+readme = open(R("README.md"), encoding="utf-8").read()
+checks = [
+    ("spi.py replaced by the exact SPI implementation (spi_exact.py)", has("src/risk/spi_exact.py", "def rank_windows") and has("src/risk/spi.py", absent="normal approximation")),
+    ("escape unified to the two 0/1 events (escape.py; triage per defective part)", has("src/risk/escape.py", "localized_escape_score") and has("src/risk/triage.py", "per_defective")),
+    ("faithfulness-gated triage not claimed as a contribution", "faithfulness-gated" not in readme.lower() or "not a contribution" in readme.lower()),
+    ("one operating-point count (recomputed, docs/PROJECT_STATUS.md)", has("docs/PROJECT_STATUS.md", "18/20")),
+    ("detector-run count computed, not quoted (Section 6 above)", True),
+    ("README test count matches the tests on disk", f"{n_tests} tests" in readme),
+    ("requirements.txt lists ultralytics, no Deformable-DETR", has("requirements.txt", "ultralytics", absent="deformable")),
+    ("configs/config.yaml describes SPERC, not the removed Kaggle pipeline", has("configs/config.yaml", "SPERC", absent="Swin")),
+    ("README does not list src/xai/rollout.py", "rollout.py" not in readme),
+    ("SH-DETR quoted as 83.03%", has("docs/RESEARCH_PLAN.md", "83.03")),
+    (".gitattributes with * text=auto", has(".gitattributes", "* text=auto")),
+]
+display(pd.DataFrame(checks, columns=["Section 13.2 item", "done"]).set_index("Section 13.2 item"))
+print(f"{n_tests} tests in tests/")
+''')
+md(r'''
+**Limitations to state in the paper (Section 14).** Guarantees are marginal, over calibration draws,
+not per part. Drift in the experiments is synthetic. PCB defects are artificially inserted. Tier N
+depends on an unobservable distance epsilon; the KS diagnostic estimates alignment but does not
+certify it. Tier H caps are loose at small m (e.g. 0.188 at m = 15) - C3 turns that looseness into a
+result: *synthetic data can sharpen the operating point when it is good, but it cannot sharpen the
+distribution-free worst case below the real-data grid.* Detector accuracy trails the state of the
+art on NEU-DET; the claim is in real defects, not mAP.
+
+**Fallback paper, if Stage 1 fails:** "Where conformal escape control breaks at cold start, and why
+corrections fail" - the scalar reduction, the quantisation analysis, the defect-seeking acquisition
+results, the three refuted corrections and the Stage-1 negative result.
+''')
 
 
-sys.path.insert(0, os.path.join(ROOT, "scripts"))
-from nb_repair import repair_split_literals, check
-_n = repair_split_literals(cells)
-if _n:
-    print(f"  repaired {_n} split string literal(s)")
-_bad = check(cells)
-for _i, _m in _bad:
-    print(f"  STILL BROKEN cell {_i}: {_m}")
+# =============================================================== write
+bad = []
+for i, c in enumerate(cells):
+    if c["cell_type"] == "code":
+        try:
+            compile("".join(c["source"]), f"<cell {i}>", "exec")
+        except SyntaxError as e:
+            bad.append((i, str(e)))
+if bad:
+    for i, e in bad:
+        print(f"cell {i} does not compile: {e}")
+    sys.exit(1)
 
 nb = {"cells": cells,
-      "metadata": {"kernelspec": {"display_name": "Python (vision_qa_xai)",
-                                  "language": "python", "name": "vision_qa_xai"},
-                   "language_info": {"name": "python", "version": "3.10.11"}},
+      "metadata": {"kernelspec": {"display_name": "Python 3 (vqaenv)", "language": "python", "name": "python3"},
+                   "language_info": {"name": "python", "version": "3.10"}},
       "nbformat": 4, "nbformat_minor": 5}
-os.makedirs("notebook", exist_ok=True)
-json.dump(nb, io.open(OUT, "w", encoding="utf-8"), indent=1, ensure_ascii=False)
+os.makedirs(os.path.dirname(OUT), exist_ok=True)
+with io.open(OUT, "w", encoding="utf-8") as f:
+    json.dump(nb, f, indent=1, ensure_ascii=False)
 n_code = sum(1 for c in cells if c["cell_type"] == "code")
-print(f"wrote {OUT}")
-print(f"  {len(cells)} cells ({n_code} code), {os.path.getsize(OUT)//1024} KB")
+print(f"wrote {OUT}: {len(cells)} cells ({n_code} code), {os.path.getsize(OUT) // 1024} KB")

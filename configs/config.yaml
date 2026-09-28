@@ -1,84 +1,136 @@
 # =============================================================================
-# VisionQA — Phase 1 (Vision Core) + Phase 2 (XAI Engine) — config.yaml
-# Single source of truth. Adapted for Kaggle notebook environment.
+# Project configuration - single source of truth for the SPERC experiments.
+# Mirrors the "Certified Cold-Start Defect Inspection - Complete Project Document"
+# (docs/Project_Document.pdf): Section numbers below refer to it.
+#
+# Detector training schedules (image size / batch / epochs per dataset) live in
+# src/evaluation/train_baselines.py, because they are tied to each dataset's
+# defect scale.
 # =============================================================================
 
 paths:
-  # Kaggle input mounts (read-only) — adjust the dataset slugs if you attach
-  # them under different names in "Add Data".
-  pcb_raw_dir: "/kaggle/input/pcb-defects"                        # akhatova/pcb-defects
-  neu_raw_dir: "/kaggle/input/neu-surface-defect-database"        # kaustubhdikshit/neu-surface-defect-database
+  raw_dir: data/raw
+  preds_dir: runs/preds            # cached detections: <dataset>_<tag>_<split>.json
+  out_dir: runs/coldstart          # sweep results
+  generated_dir: data/generated    # generator output: <dataset>/<source>/<stem>.png + <stem>_mask.png
+  synthetic_dir: data/synthetic    # labelled synthetic sets built from generator output
 
-  # Kaggle working dir (writable)
-  work_dir: "/kaggle/working"
-  processed_dir: "/kaggle/working/data/processed"
-  coco_pcb_json: "/kaggle/working/data/processed/pcb_coco.json"
-  coco_neu_json: "/kaggle/working/data/processed/neu_coco.json"
-  coco_merged_json: "/kaggle/working/data/processed/merged_coco.json"
-  images_merged_dir: "/kaggle/working/data/processed/images"
+# ---------------------------------------------------------------- Section 9
+# Five datasets with different jobs; the headline rests on the two with clean parts.
+datasets: [kolektor, magnetic_tile, neu, gc10, pcb]
+primary_datasets: [kolektor, magnetic_tile]        # review load measurable (clean parts)
+validity_datasets: [neu, gc10, pcb]                # escape control only
+# Not part of the plan's five; converters are kept for optional extra checks:
+optional_datasets: [dagm]                          # DAGM 2007: artificial textures
+bridge_dataset: mvtec                              # MVTec AD, Stage 2 (image-level anomaly scores)
 
-  checkpoints_dir: "/kaggle/working/checkpoints"
-  outputs_dir: "/kaggle/working/outputs"
-  heatmaps_dir: "/kaggle/working/outputs/heatmaps"
-  eval_dir: "/kaggle/working/outputs/eval"
-  logs_dir: "/kaggle/working/logs"
-
-data:
-  # Roboflow COCO export for PCB defects is assumed to already sit at
-  # <pcb_raw_dir>/<split>/_annotations.coco.json + images alongside it.
-  # If you instead point pcb_raw_dir at the raw akhatova/pcb-defects Kaggle
-  # dataset (PASCAL-VOC-style XML, like NEU), set pcb_format: "voc" and the
-  # same neu_xml_to_coco converter will be reused for it.
-  pcb_format: "coco"          # "coco" (Roboflow export) or "voc" (raw XML)
-  val_fraction: 0.15
-  test_fraction: 0.10
+# Section 9.1: train / cal / test, cal never seen by training or model selection
+# (the detector's own val slice is carved from train). Defect-aware allocation:
+# defective images 45/30/25, clean images 60/15/25 - roughly halves every alpha floor.
+splits:
   seed: 42
-  unify_label_space: true     # merge PCB + NEU classes into one num_classes space
+  clean_fractions: [0.60, 0.15, 0.25]
+  defect_fractions: [0.45, 0.30, 0.25]
+  defect_aware: all                # all | rare_only (kolektor, magnetic_tile, dagm) | none
+  inner_val_fraction: 0.15         # detector's early-stopping slice, carved from train
 
-model:
-  backbone: "swin_base_patch4_window7_224"   # timm backbone name
-  use_timm_backbone: true
-  detector_checkpoint: "SenseTime/deformable-detr"  # HF base config to inherit from
-  num_queries: 100
-  image_size: 800
+# ---------------------------------------------------------------- Sections 7, 10
+# RT-DETR-L is the main detector (NMS-free, so calibration targets the model's own
+# output); YOLOv8s is the comparison. Three seeds (Section 15.2).
+models: [rtdetr-l, yolov8s]
+headline_model: rtdetr-l
+seeds: [0, 1, 2]
 
+# Section 10.3-10.4: Windows + RTX 5060 (8 GB). vram_profile auto -> "8gb" below 12 GB:
+# YOLOv8s batch 8 at imgsz 256-384, 4 at 512-640, 2 at 800+; RT-DETR-L half of that
+# (gradients still accumulate to a nominal batch of 64). An out-of-memory error
+# retries the run at half the batch. workers 0 = in-process loading (Windows);
+# cache ram = every training image decoded once into RAM (32 GB is plenty).
 training:
-  batch_size: 2
-  grad_accum_steps: 4
-  epochs: 30
-  lr: 1.0e-4
-  lr_backbone: 1.0e-5
-  weight_decay: 1.0e-4
-  focal_alpha: 0.25
-  focal_gamma: 2.0
-  giou_weight: 2.0
-  bbox_weight: 5.0
-  class_weight: 1.0
-  warmup_steps: 500
-  fp16: true
-  eval_every_epochs: 2
-  save_every_epochs: 5
+  vram_profile: auto               # auto | 8gb | full
+  workers: 0
+  cache: ram                       # ram | disk | none
+  patience: 40
 
-xai:
-  method: "rollout"          # "rollout" or "rollout+grad" (Chefer-style relevance)
-  discard_ratio: 0.9         # fraction of lowest attention values zeroed before rollout
-  overlay_alpha: 0.45
+# ---------------------------------------------------------------- Section 2.2
+# Escape events, both 0/1 per defective image, reported separately, never mixed.
+escape_kinds: [part, localized]    # part = primary (what reaches the customer)
+iou_thresh: 0.5
 
-inference:
-  # Confidence floor for a detection to reach the handoff record. DETR-family
-  # models trained on a small dataset stay poorly calibrated — this model tops
-  # out around 0.72 and only 5 of 180 test images have anything above 0.5, so
-  # the usual 0.5 default silently emits zero detections for every image.
-  # 0.25 matches the ground-truth density (2.65 detections/image vs 2.42
-  # actual). Raise it as mAP improves.
-  score_thresh: 0.25
+# ---------------------------------------------------------------- Sections 9.2, 12
+# Protocol P1: subsample the REAL defective calibration pool.
+coldstart:
+  m_values: [5, 10, 15, 25, 40, full]
+  n_draws: 500
+  seed: 0
+  resample_cal_test: true          # re-split held-out cal+test on every draw
+  tie_break: true                  # random tie-breaking (Section 8.5, assumption 4)
+  # m-star (Section 12.2): smallest m with issuance >= 80%, escape <= target and a
+  # usable review load, at a fixed Tier H cap (<= alpha_max, the plant's choice).
+  mstar_min_issued: 0.8
+  mstar_review_tolerance: 1.1      # usable = within 1.1 x the oracle's review load ...
+  mstar_review_target: null        # ... or an absolute review-load target, e.g. 0.30
+  mstar_alpha_max_values: [0.20, 0.25, 0.35, 0.50]
 
-segmentation:
-  # No polygon masks exist in the raw PCB / NEU datasets (bbox-only).
-  # We derive pixel masks from detected boxes via OpenCV GrabCut instead of
-  # training a full Mask2Former on unavailable ground truth. See README.
-  method: "grabcut_from_boxes"
-  grabcut_iters: 5
+# Certificate settings (Sections 6, 8).
+#   target_escape : escape rate the plant wants under a good generator (Tier N)
+#   betas         : rank-window tolerances {0.05, 0.10, 0.20} (Section 12.1). SPERC
+#                   runs at alpha = target - beta (Tier N = target; skipped when
+#                   that is <= 0) and at alpha = target (Tier N = target + beta).
+#   alpha_max     : largest worst-case escape the plant tolerates (Tier H). A Tier H
+#                   cap above it is a refusal.
+certificate:
+  target_escape: 0.10
+  betas: [0.05, 0.10, 0.20]
+  alpha_max: 0.25
 
-decision_rule:
-  replace_damage_pct_threshold: 15.0
+baselines:
+  acquisition_gamma: 3.0           # defect-seeking screen p ~ score^gamma (baseline 4)
+
+# ---------------------------------------------------------------- Stages 1, 4, 5
+# `real_as_synthetic` is the Stage-1 best case (unused real calibration defects stand
+# in for synthetic ones). Generator sources are read from
+#   <preds_dir>/<dataset>_<tag>_syn_<name>.json   (written by the pipeline's synth stage)
+synthetic_sources: [real_as_synthetic, training_free, anomalydiffusion]
+
+# Stage-5 misalignment stress tests: random scores, another line's real defects,
+# and an under-trained generator checkpoint. Realised escape must stay under Tier H.
+stress_sources: [uniform_noise, "cross:gc10", "cross:neu"]
+stress_generators: [anomalydiffusion_undertrained]
+
+# Stage 1 (Section 12): best case on cached GC10 scores; go / no-go.
+stage1:
+  datasets: [gc10]
+  m_values: [5, 10, 15, 25]
+  n_draws: 500
+
+# ---------------------------------------------------------------- generators (Sections 7, 10.3)
+generators:
+  n_synthetic: 1000                # N per primary dataset (Section 15, weeks 5-8)
+  n_reference: 5                   # 3-5 reference defects, TRAIN split only
+  reference_seed: 0
+  training_free:                   # training-free one-shot arm of RQ3
+    backend: builtin_sd_inpaint    # builtin_sd_inpaint | tfidg (official repo) | copy_paste
+    model_id: sd2-community/stable-diffusion-2-inpainting   # mirror of the deprecated stabilityai repo; or a local folder
+    strength: 0.55
+    steps: 30
+    guidance: 4.0
+    prompt: "a close-up photo of an industrial surface with a {defect} defect"
+  anomalydiffusion:                # fine-tuned few-shot arm of RQ3 (Ubuntu / WSL2)
+    repo_dir: external/anomalydiffusion
+
+# ---------------------------------------------------------------- Stage 2 (MVTec AD bridge)
+mvtec:
+  categories: all                  # or a list, e.g. [bottle, cable]
+  backbone: wide_resnet50_2
+  image_size: 224
+  coreset_fraction: 0.1
+  m_values: [5, 10, 15, 25]
+  n_draws: 500
+
+# ---------------------------------------------------------------- Section 8.4 (no data needed)
+commissioning:
+  m_values: [5, 10, 15, 25, 40]
+  N: 1000
+  alphas: [0.05, 0.10]
+  betas: [0.05, 0.10, 0.20]

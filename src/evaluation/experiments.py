@@ -32,12 +32,12 @@ import glob
 
 import numpy as np
 
-from src.risk.conformal import (conformal_risk_control, escape_threshold_grid,
-                                build_calibration_losses, RiskNotAchievable)
+from src.risk.escape import KINDS, crc_escape_threshold, escape_scores
 from src.risk.triage import (build_grid, fit_triage_policy, evaluate_policy,
                              NoCertifiableConfig)
 
-DATASETS = ["neu", "gc10", "pcb", "magnetic_tile", "kolektor"]
+# The plan's five datasets (Section 9); DAGM stays available via --datasets.
+DATASETS = ["kolektor", "magnetic_tile", "neu", "gc10", "pcb"]
 ALPHAS = [0.01, 0.05, 0.10, 0.20]
 IOU = 0.5
 
@@ -66,7 +66,7 @@ def load_preds(path):
 
 # ---------------------------------------------------------------- predictions
 def dump_predictions(dataset, weights, imgsz, split, out_path=None,
-                     conf=0.01, yolo_dir="data/yolo", device=0):
+                     conf=0.001, yolo_dir="data/yolo", device=0):
     """Cache detector output at a very low confidence floor.
 
     The floor must be far below any threshold calibration might select: if we
@@ -129,94 +129,87 @@ def dump_predictions(dataset, weights, imgsz, split, out_path=None,
 
 
 # ---------------------------------------------------------------- risk
-def risk_for_dataset(cal, test, n_trials=60, seed=0):
-    """Single-split calibration plus a repeated-split estimate of E[risk].
+def _escape_arrays(records, kind, iou=IOU):
+    return escape_scores(records, kind, iou)
 
-    The repeated estimate is the honest test of the theorem: CRC bounds the
-    expectation over calibration draws, so one split says little on its own.
 
-    A refusal contributes 0 to the escape mean, because a refused batch is
-    handed to human review and escapes nothing. Averaging only over the splits
-    that issued a certificate would be a selection on the calibration draw, and
-    is what previously made a satisfied guarantee read as violated.
+def risk_for_dataset(cal, test, n_trials=200, seed=0, kinds=KINDS):
+    """CRC on the two 0/1 escape events (src/risk/escape.py), full calibration pool.
+
+    Single split plus a repeated-split estimate of E[escape]: CRC bounds the
+    expectation over calibration draws, so one split says little on its own. Each
+    repetition re-partitions the held-out defective images into calibration and
+    test blocks of the original sizes.
+
+    A refusal contributes 0 to the escape mean, because a refused batch is handed
+    to human review and escapes nothing. Averaging only over the splits that
+    issued a certificate would be a selection on the calibration draw, and is what
+    previously made a satisfied guarantee read as violated.
     """
-    lam = escape_threshold_grid(201)
-    Lc, Gc, _ = build_calibration_losses(cal, lam, IOU)
-    Lt, Gt, _ = build_calibration_losses(test, lam, IOU)
-
-    single, repeated = [], {}
-    for a in ALPHAS:
-        try:
-            l = conformal_risk_control(Lc, lam, a)
-            j = int(np.flatnonzero(lam == l)[0])
-            single.append(dict(alpha=a, **{"lambda": float(l)}, error=None,
-                               escape_cal=float(Lc[:, j].mean()),
-                               escape_test=float(Lt[:, j].mean()),
-                               covered=bool(Lt[:, j].mean() <= a)))
-        except RiskNotAchievable as e:
-            single.append(dict(alpha=a, **{"lambda": None}, error=str(e)[:60]))
-
+    out = {"n_cal_parts": len(cal), "n_test_parts": len(test), "kinds": {}}
     rng = np.random.default_rng(seed)
-    allL = np.vstack([Lc, Lt])
-    n_cal = len(Lc)
-    for a in ALPHAS:
-        esc, cond, ref = [], [], 0
-        for _ in range(n_trials):
-            idx = rng.permutation(len(allL))
-            A, Bt = allL[idx[:n_cal]], allL[idx[n_cal:]]
-            try:
-                l = conformal_risk_control(A, lam, a)
-                j = int(np.flatnonzero(lam == l)[0])
-                v = float(Bt[:, j].mean())
+    for kind in kinds:
+        cc, ct = _escape_arrays(cal, kind), _escape_arrays(test, kind)
+        single, repeated = [], {}
+        for a in ALPHAS:
+            lam = crc_escape_threshold(cc, a)
+            issued = bool(np.isfinite(lam))
+            single.append(dict(alpha=a, issued=issued,
+                               threshold=float(lam) if issued else None,
+                               escape_test=float(np.mean(ct < lam)) if ct.size else None))
+        allc = np.concatenate([cc, ct])
+        n_c = cc.size
+        for a in ALPHAS:
+            esc, cond, ref = [], [], 0
+            for _ in range(n_trials):
+                idx = rng.permutation(allc.size)
+                A, B = allc[idx[:n_c]], allc[idx[n_c:]]
+                lam = crc_escape_threshold(A, a)
+                if not np.isfinite(lam):
+                    ref += 1
+                    esc.append(0.0)
+                    continue
+                v = float(np.mean(B < lam))
                 esc.append(v)
                 cond.append(v)
-            except RiskNotAchievable:
-                ref += 1
-                esc.append(0.0)
-        repeated[str(a)] = dict(
-            # Unconditional over all draws: this is the quantity CRC bounds and
-            # the only one that should be compared against alpha.
-            mean_escape_test=float(np.mean(esc)) if esc else 0.0,
-            std=float(np.std(esc)) if esc else 0.0,
-            # Conditional on issuing. Reported for transparency, NOT the
-            # guarantee; it is high exactly when refusal is doing its job.
-            mean_escape_issued=float(np.mean(cond)) if cond else None,
-            frac_trials_covered=float(np.mean([e <= a for e in esc])) if esc else 1.0,
-            n_trials=n_trials, n_refused=ref, refusal_rate=ref / n_trials,
-            n_issued=len(cond))
-    return dict(single_split=single, repeated=repeated,
-                n_cal=len(Lc), n_test=len(Lt))
+            e = np.asarray(esc)
+            repeated[str(a)] = dict(
+                mean_escape_test=float(e.mean()),                 # what CRC bounds
+                se=float(e.std(ddof=1) / np.sqrt(e.size)) if e.size > 1 else 0.0,
+                mean_escape_issued=float(np.mean(cond)) if cond else None,   # NOT the guarantee
+                holds=bool(e.mean() <= a + 3 * (e.std(ddof=1) / np.sqrt(e.size) if e.size > 1 else 0)),
+                n_trials=n_trials, n_refused=ref, refusal_rate=ref / n_trials,
+                n_issued=len(cond))
+        out["kinds"][kind] = dict(single_split=single, repeated=repeated,
+                                  n_cal_defective=int(cc.size), n_test_defective=int(ct.size),
+                                  alpha_floor=float(1.0 / (cc.size + 1)))
+    return out
 
 
 def drift_experiment(cal, test, seed=0):
     """Induce covariate shift by biasing the test block toward hard images.
 
-    Hardness is proxied by the top detection score: resampling toward
-    low-scoring images simulates a batch the detector finds unfamiliar, which is
-    what a new coil or a dimmed lamp looks like downstream. Exchangeability is
-    deliberately broken so the degradation can be measured rather than assumed.
+    Part escape (the primary event). Hardness is proxied by the top detection
+    score: resampling toward low-scoring images simulates a batch the detector
+    finds unfamiliar, which is what a new coil or a dimmed lamp looks like
+    downstream. Exchangeability is deliberately broken so the degradation can be
+    measured rather than assumed; the drift monitor (src/risk/adaptive.py) is
+    what a plant runs against it.
     """
-    lam = escape_threshold_grid(201)
-    Lc, _, _ = build_calibration_losses(cal, lam, IOU)
-    hard = np.array([max(r["pred_scores"]) if r["pred_scores"] else 0.0 for r in test])
-    keep = [i for i, r in enumerate(test) if len(r["gt_boxes"]) > 0]
-    if not keep:
+    cc = _escape_arrays(cal, "part")
+    ct = _escape_arrays(test, "part")
+    if ct.size == 0:
         return {}
-    hard = hard[keep]
-    order = np.argsort(hard)                       # hardest first
+    order = np.argsort(np.where(np.isfinite(ct), ct, -1.0))    # hardest first
     out = {}
     for a in (0.05, 0.10):
-        try:
-            l = conformal_risk_control(Lc, lam, a)
-        except RiskNotAchievable:
+        lam = crc_escape_threshold(cc, a)
+        if not np.isfinite(lam):
             continue
-        j = int(np.flatnonzero(lam == l)[0])
         row = {}
         for frac in (0.0, 0.25, 0.5, 0.75, 1.0):
             k = max(5, int(len(order) * (1 - 0.6 * frac)))
-            sub = [test[keep[i]] for i in order[:k]]
-            Ls, _, _ = build_calibration_losses(sub, lam, IOU)
-            row[f"shift_{frac:.2f}"] = round(float(Ls[:, j].mean()), 4)
+            row[f"shift_{frac:.2f}"] = round(float(np.mean(ct[order[:k]] < lam)), 4)
         out[str(a)] = row
     return out
 
@@ -255,8 +248,11 @@ def triage_for_dataset(cal, test, alpha=0.05, delta=0.10, max_false_scrap=0.20,
     source = "audited" if (used_cal and used_test) else "proxy"
     if dc.sum() == 0 or (~dc).sum() == 0:
         return {"skipped": "dataset has no negatives; triage is not evaluable"}
+    # The faithfulness gate is dropped from the paper's claims (project document,
+    # Sections 3 and 11.1: it was vacuous as built), so phi is fixed at 0 here and
+    # the policy is the plain two-threshold accept / review / reject rule.
     grid = build_grid(np.linspace(0.02, 0.60, 15), np.linspace(0.30, 0.95, 14),
-                      np.array([0.0, 0.3, 0.5]))
+                      np.array([0.0]))
     try:
         sol = fit_triage_policy(sc, fc, dc, grid, alpha, delta,
                                 max_false_scrap=max_false_scrap)
@@ -286,7 +282,7 @@ def load_faithfulness(dataset, key="faithfulness"):
 
 
 def run_all(model="yolov8s.pt", datasets=None, skip_predict=True,
-            n_trials=60, verbose=True):
+            n_trials=200, verbose=True):
     """Predictions -> risk -> drift -> triage for every trained dataset."""
     datasets = datasets or DATASETS
     if isinstance(datasets, str):
@@ -301,7 +297,8 @@ def run_all(model="yolov8s.pt", datasets=None, skip_predict=True,
     wmap = {(r["model"], r["dataset"], r.get("encoding") or "baseline"): r
             for r in results}
 
-    tag_of = "rtdetr" if "rtdetr" in model.lower() else "yolov8s"
+    # Same tag as dump_ultralytics_preds.py writes (weights stem): yolov8s, rtdetr-l.
+    tag_of = os.path.basename(model).replace(".pt", "")
     risk_all, triage_all = {}, {}
     for name in datasets:
         rec = wmap.get((model, name, "baseline"))
@@ -332,7 +329,7 @@ def run_all(model="yolov8s.pt", datasets=None, skip_predict=True,
             r["drift"] = drift_experiment(cal, test)
             risk_all[tag] = r
             if verbose:
-                print(f"[{name}] risk done  (cal={r['n_cal']} test={r['n_test']})",
+                print(f"[{name}] risk done  (cal={r['n_cal_parts']} test={r['n_test_parts']})",
                       flush=True)
         except Exception as e:
             print(f"[{name}] risk FAILED: {type(e).__name__}: {e}", flush=True)
@@ -345,12 +342,22 @@ def run_all(model="yolov8s.pt", datasets=None, skip_predict=True,
         except Exception as e:
             print(f"[{name}] triage FAILED: {type(e).__name__}: {e}", flush=True)
 
-    if risk_all:
-        json.dump(risk_all, open("runs/risk_results.json", "w"), indent=1)
-        print("wrote runs/risk_results.json")
-    if triage_all:
-        json.dump(triage_all, open("runs/triage_results.json", "w"), indent=1)
-        print("wrote runs/triage_results.json")
+    # merge, so running the two detectors one after the other keeps both
+    for path, new in (("runs/risk_results.json", risk_all), ("runs/triage_results.json", triage_all)):
+        if not new:
+            continue
+        old = {}
+        if os.path.exists(path):
+            try:
+                with open(path) as f:
+                    old = json.load(f)
+            except Exception:
+                old = {}
+        old.update(new)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(old, f, indent=1)
+        print(f"wrote {path} ({len(new)} entries updated)")
     return risk_all, triage_all
 
 
@@ -361,6 +368,6 @@ if __name__ == "__main__":
     ap.add_argument("--model", default="yolov8s.pt")
     ap.add_argument("--datasets", default=",".join(DATASETS))
     ap.add_argument("--skip_predict", action="store_true")
-    ap.add_argument("--n_trials", type=int, default=60)
+    ap.add_argument("--n_trials", type=int, default=200)
     a = ap.parse_args()
     run_all(a.model, a.datasets, a.skip_predict, a.n_trials)

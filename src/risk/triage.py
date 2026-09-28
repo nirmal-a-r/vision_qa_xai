@@ -133,6 +133,7 @@ def fit_triage_policy(
     alpha: float,
     delta: float = 0.10,
     max_false_scrap: float | None = None,
+    per_defective: bool = True,
 ) -> TriageSolution:
     """Certify escape risk over the grid, then take the cheapest certified point.
 
@@ -146,6 +147,10 @@ def fit_triage_policy(
     max_false_scrap : optional cap on the auto-reject-a-clean-part rate. Applied
         as a *filter on already-certified* configurations, so it never weakens
         the escape guarantee.
+    per_defective : certify escape per DEFECTIVE part (default), the event the
+        whole project uses (project document, Section 2.3; part escape of
+        src/risk/escape.py). False reproduces the older per-shipped-part rate,
+        which is that number times the line's defect prevalence.
 
     Returns the selected operating point plus its calibration-set statistics.
     """
@@ -160,13 +165,16 @@ def fit_triage_policy(
     reviews = review_indicator(dec)
     scraps = false_scrap_indicator(dec, has_defect)
 
-    certified = learn_then_test(escapes, alpha, delta, correction="bonferroni")
+    risk_rows = escapes[has_defect] if per_defective else escapes
+    if risk_rows.shape[0] == 0:
+        raise NoCertifiableConfig("no defective calibration images: escape is undefined")
+    certified = learn_then_test(risk_rows, alpha, delta, correction="bonferroni")
     if certified.size == 0:
-        best = int(np.argmin(escapes.mean(axis=0)))
+        best = int(np.argmin(risk_rows.mean(axis=0)))
         raise NoCertifiableConfig(
             f"no configuration certifies escape rate <= {alpha} at delta={delta} "
-            f"over {len(configs)} configs and n={len(max_scores)} calibration images. "
-            f"Best empirical escape rate is {escapes[:, best].mean():.4f}. "
+            f"over {len(configs)} configs and n={risk_rows.shape[0]} calibration images. "
+            f"Best empirical escape rate is {risk_rows[:, best].mean():.4f}. "
             "Loosen alpha, collect more calibration data, or improve recall."
         )
 
@@ -189,7 +197,7 @@ def fit_triage_policy(
         n_calib=len(max_scores),
         n_configs=len(configs),
         n_certified=int(certified.size),
-        escape_rate_cal=float(escapes[:, j].mean()),
+        escape_rate_cal=float(risk_rows[:, j].mean()),
         review_load_cal=float(reviews[:, j].mean()),
         false_scrap_cal=float(scraps[:, j].mean()),
     )
